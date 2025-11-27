@@ -51,7 +51,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -238,7 +237,6 @@ fun Terminal(
                         translationY = zoomOffset.y * zoomScale
                         scaleX = zoomScale
                         scaleY = zoomScale
-                        TransformOrigin(0f, 0f).also { transformOrigin = it }
                     }
                     .pointerInput(Unit) {
                         coroutineScope {
