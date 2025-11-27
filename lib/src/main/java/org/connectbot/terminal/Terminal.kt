@@ -51,6 +51,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -128,6 +129,7 @@ fun Terminal(
     // Font size and zoom state
     var zoomScale by remember { mutableStateOf(1f) }
     var zoomOffset by remember { mutableStateOf(Offset.Zero) }
+    var zoomOrigin by remember { mutableStateOf(TransformOrigin.Center) }
     var isZooming by remember { mutableStateOf(false) }
     var calculatedFontSize by remember { mutableStateOf(initialFontSize) }
 
@@ -283,6 +285,7 @@ fun Terminal(
                             translationY = zoomOffset.y * zoomScale
                             scaleX = zoomScale
                             scaleY = zoomScale
+                            transformOrigin = zoomOrigin
                         }
                         .pointerInput(Unit) {
                             coroutineScope {
@@ -371,6 +374,13 @@ fun Terminal(
 
                                         // Handle zoom using Compose's built-in gesture calculations
                                         isZooming = true
+
+                                        val centerX = (down.position.x + secondPointer.position.x) / 2f
+                                        val centerY = (down.position.y + secondPointer.position.y) / 2f
+                                        zoomOrigin = TransformOrigin(
+                                            pivotFractionX = centerX / size.width,
+                                            pivotFractionY = centerY / size.height
+                                        )
 
                                         while (true) {
                                             val event = awaitPointerEvent()
