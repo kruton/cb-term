@@ -1,0 +1,161 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 5 */3 * *"
+  merge_group:
+    types: [ checks_requested ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with history)
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
+
+      - name: Set up JDK
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
+        with:
+          dependency-graph: generate-and-submit
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: Delete old Android SDK cmdline-tools
+        run: |
+          rm -rf $ANDROID_HOME/cmdline-tools/latest
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'cmdline-tools;latest tools platform-tools'
+
+      - name: Build ConnectBot Terminal
+        run: ./gradlew build
+
+      - name: Enable KVM for emulator and clear up space
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+          echo "Available disk space before cleanup:"
+          df -h
+
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/google/chrome \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/Python \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/node \
+            /opt/microsoft/msedge \
+            /opt/microsoft/powershell \
+            /opt/pipx \
+            /usr/lib/mono \
+            /usr/lib/node_modules \
+            /usr/local/graalvm/ \
+            /usr/local/julia* \
+            /usr/local/share/boost \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/share/dotnet \
+            /usr/share/swift
+
+          sudo apt-get clean
+
+          sudo swapoff -a || true
+          sudo rm -f /swapfile || true
+
+          echo "Available disk space after cleanup:"
+          df -h
+
+      - name: Run instrument tests
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          disk-size: 2G
+          script: ./gradlew connectedCheck --continue
+
+      - name: Prepare release
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          if git describe --exact-match; then \
+            TAGGED=yes
+          fi
+
+          if [[ -n $TAGGED ]]; then
+            GITHUB_TAG="$(git describe)"
+            echo "${GITHUB_TAG}" > tag.txt
+            echo "Release ${GITHUB_TAG}" > release-title.txt
+          else \
+            GITHUB_TAG="git-$(git describe)"
+            GITHUB_TITLE="$(git log -1 --pretty=%B | head -1)"
+            echo "${GITHUB_TAG}" > tag.txt
+            echo "${GITHUB_TAG}: ${GITHUB_TITLE}" > release-title.txt
+          fi
+          cp ./lib/build/outputs/aar/lib-release.aar ConnectBotTerminal-${GITHUB_TAG}.aar
+
+      - name: Store artifacts for upload
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: aar
+          path: |
+            release-title.txt
+            tag.txt
+            ConnectBotTerminal-*.aar
+
+  upload:
+    name: Upload to GitHub releases
+    needs: build
+    if: ${{ (github.event_name == 'push') && (github.repository == 'connectbot/terminal') && ((github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')) }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts from previous job
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: aar
+
+      - name: Set release name
+        id: name
+        run: |
+          echo "RELEASE_TITLE=$(cat release-title.txt)" >> "$GITHUB_OUTPUT"
+          echo "GITHUB_TAG=$(cat tag.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release
+        uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
+        with:
+          body: "Untested build"
+          draft: true
+          tag_name: ${{ steps.name.outputs.GITHUB_TAG }}
+          name: ${{ steps.name.outputs.RELEASE_TITLE }}
+          generate_release_notes: true
+          files: |
+            ConnectBotTerminal-*.aar

@@ -18,6 +18,7 @@
 #include <android/log.h>
 #include <cstring>
 #include <algorithm>
+#include <vector>
 
 #define LOG_TAG "TermScreen"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -512,28 +513,64 @@ void Terminal::invokePushScrollbackLine(int cols, const VTermScreenCell* cells) 
     // Get ArrayList class for combining chars
     jclass arrayListClass = env->FindClass("java/util/ArrayList");
     jmethodID arrayListConstructor = env->GetMethodID(arrayListClass, "<init>", "()V");
+    jmethodID arrayListAdd = env->GetMethodID(arrayListClass, "add", "(Ljava/lang/Object;)Z");
 
-    // Create array of ScreenCell objects
-    jobjectArray cellArray = env->NewObjectArray(cols, screenCellClass, nullptr);
-    if (!cellArray) {
-        LOGE("Failed to create ScreenCell array");
-        env->DeleteLocalRef(screenCellClass);
-        env->DeleteLocalRef(arrayListClass);
-        return;
-    }
+    // Get Character class for boxing chars
+    jclass charClass = env->FindClass("java/lang/Character");
+    jmethodID charValueOf = env->GetStaticMethodID(charClass, "valueOf", "(C)Ljava/lang/Character;");
 
-    // Convert each VTermScreenCell to ScreenCell
+    // Build a list to hold actual cells (excluding fullwidth placeholders)
+    std::vector<jobject> screenCells;
+
     for (int i = 0; i < cols; i++) {
         const VTermScreenCell& cell = cells[i];
 
-        // Get the primary character
+        // Get the primary character and handle surrogate pairs
         jchar primaryChar = ' ';
-        if (cell.chars[0] != 0) {
-            primaryChar = (jchar)cell.chars[0];
-        }
-
-        // Create empty list for combining characters (simplified for now)
         jobject combiningList = env->NewObject(arrayListClass, arrayListConstructor);
+
+        if (cell.chars[0] != 0) {
+            uint32_t codepoint = cell.chars[0];
+
+            if (codepoint <= 0xFFFF) {
+                // BMP character - fits in single jchar
+                primaryChar = (jchar)codepoint;
+            } else {
+                // Surrogate pair needed for codepoints > U+FFFF
+                codepoint -= 0x10000;
+                primaryChar = (jchar)(0xD800 + (codepoint >> 10));  // High surrogate
+                jchar lowSurrogate = (jchar)(0xDC00 + (codepoint & 0x3FF));  // Low surrogate
+
+                // Add low surrogate to combining chars
+                jobject lowSurrogateObj = env->CallStaticObjectMethod(charClass, charValueOf, lowSurrogate);
+                env->CallBooleanMethod(combiningList, arrayListAdd, lowSurrogateObj);
+                env->DeleteLocalRef(lowSurrogateObj);
+            }
+
+            // Add any actual combining characters (chars[1] onwards)
+            for (int j = 1; j < VTERM_MAX_CHARS_PER_CELL && cell.chars[j] != 0; j++) {
+                uint32_t combiningCodepoint = cell.chars[j];
+
+                if (combiningCodepoint <= 0xFFFF) {
+                    jobject charObj = env->CallStaticObjectMethod(charClass, charValueOf, (jchar)combiningCodepoint);
+                    env->CallBooleanMethod(combiningList, arrayListAdd, charObj);
+                    env->DeleteLocalRef(charObj);
+                } else {
+                    // Combining character is also a surrogate pair
+                    combiningCodepoint -= 0x10000;
+                    jchar highSurr = (jchar)(0xD800 + (combiningCodepoint >> 10));
+                    jchar lowSurr = (jchar)(0xDC00 + (combiningCodepoint & 0x3FF));
+
+                    jobject highObj = env->CallStaticObjectMethod(charClass, charValueOf, highSurr);
+                    env->CallBooleanMethod(combiningList, arrayListAdd, highObj);
+                    env->DeleteLocalRef(highObj);
+
+                    jobject lowObj = env->CallStaticObjectMethod(charClass, charValueOf, lowSurr);
+                    env->CallBooleanMethod(combiningList, arrayListAdd, lowObj);
+                    env->DeleteLocalRef(lowObj);
+                }
+            }
+        }
 
         // Resolve colors
         uint8_t fgRed, fgGreen, fgBlue;
@@ -562,18 +599,32 @@ void Terminal::invokePushScrollbackLine(int cols, const VTermScreenCell* cells) 
             (jint)cell.width                // width (I)
         );
 
-        env->SetObjectArrayElement(cellArray, i, screenCell);
-        env->DeleteLocalRef(screenCell);
+        // Add to vector (will be converted to array later)
+        screenCells.push_back(screenCell);
         env->DeleteLocalRef(combiningList);
+
+        // Skip next cell if this is a fullwidth character
+        if (cell.width == 2) {
+            i++;  // Skip the placeholder cell
+        }
     }
 
-    // Call the Java callback
-    env->CallIntMethod(mCallbacks, mPushScrollbackMethod, cols, cellArray);
+    // Create array with actual cell count
+    int actualCells = screenCells.size();
+    jobjectArray actualCellArray = env->NewObjectArray(actualCells, screenCellClass, nullptr);
+    for (int i = 0; i < actualCells; i++) {
+        env->SetObjectArrayElement(actualCellArray, i, screenCells[i]);
+        env->DeleteLocalRef(screenCells[i]);
+    }
+
+    // Call the Java callback with actual cell count
+    env->CallIntMethod(mCallbacks, mPushScrollbackMethod, actualCells, actualCellArray);
 
     // Clean up
-    env->DeleteLocalRef(cellArray);
+    env->DeleteLocalRef(actualCellArray);
     env->DeleteLocalRef(screenCellClass);
     env->DeleteLocalRef(arrayListClass);
+    env->DeleteLocalRef(charClass);
 }
 
 void Terminal::invokeKeyboardOutput(const char* data, size_t len) {
@@ -638,21 +689,21 @@ void Terminal::resolveColor(const VTermColor& color, uint8_t& r, uint8_t& g, uin
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_org_connectbot_terminal_Terminal_nativeInit(JNIEnv* env, jobject /* thiz */, jobject callbacks) {
+Java_org_connectbot_terminal_TerminalNative_nativeInit(JNIEnv* env, jobject /* thiz */, jobject callbacks) {
     auto* term = new Terminal(env, callbacks);
     return reinterpret_cast<jlong>(term);
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeDestroy(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
+Java_org_connectbot_terminal_TerminalNative_nativeDestroy(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     delete term;
     return 0;
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeWriteInputBuffer(JNIEnv* env, jobject /* thiz */,
-                                    jlong ptr, jobject buffer, jint length) {
+Java_org_connectbot_terminal_TerminalNative_nativeWriteInputBuffer(JNIEnv* env, jobject /* thiz */,
+                                                                   jlong ptr, jobject buffer, jint length) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     const auto* data = static_cast<const uint8_t*>(
         env->GetDirectBufferAddress(buffer));
@@ -663,8 +714,8 @@ Java_org_connectbot_terminal_Terminal_nativeWriteInputBuffer(JNIEnv* env, jobjec
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeWriteInputArray(JNIEnv* env, jobject /* thiz */,
-                                   jlong ptr, jbyteArray data, jint offset, jint length) {
+Java_org_connectbot_terminal_TerminalNative_nativeWriteInputArray(JNIEnv* env, jobject /* thiz */,
+                                                                  jlong ptr, jbyteArray data, jint offset, jint length) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     jbyte* bytes = env->GetByteArrayElements(data, nullptr);
     int result = term->writeInput(
@@ -674,47 +725,47 @@ Java_org_connectbot_terminal_Terminal_nativeWriteInputArray(JNIEnv* env, jobject
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeResize(JNIEnv* /* env */, jobject /* thiz */,
-                         jlong ptr, jint rows, jint cols, jint scrollRows) {
+Java_org_connectbot_terminal_TerminalNative_nativeResize(JNIEnv* /* env */, jobject /* thiz */,
+                                                         jlong ptr, jint rows, jint cols, jint scrollRows) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->resize(rows, cols, scrollRows);
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeGetRows(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
+Java_org_connectbot_terminal_TerminalNative_nativeGetRows(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->getRows();
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeGetCols(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
+Java_org_connectbot_terminal_TerminalNative_nativeGetCols(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->getCols();
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeGetScrollRows(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
+Java_org_connectbot_terminal_TerminalNative_nativeGetScrollRows(JNIEnv* /* env */, jobject /* thiz */, jlong ptr) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->getScrollRows();
 }
 
 JNIEXPORT jboolean JNICALL
-Java_org_connectbot_terminal_Terminal_nativeDispatchKey(JNIEnv* /* env */, jobject /* thiz */,
-                                   jlong ptr, jint modifiers, jint key) {
+Java_org_connectbot_terminal_TerminalNative_nativeDispatchKey(JNIEnv* /* env */, jobject /* thiz */,
+                                                              jlong ptr, jint modifiers, jint key) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->dispatchKey(modifiers, key);
 }
 
 JNIEXPORT jboolean JNICALL
-Java_org_connectbot_terminal_Terminal_nativeDispatchCharacter(JNIEnv* /* env */, jobject /* thiz */,
-                                         jlong ptr, jint modifiers, jint character) {
+Java_org_connectbot_terminal_TerminalNative_nativeDispatchCharacter(JNIEnv* /* env */, jobject /* thiz */,
+                                                                    jlong ptr, jint modifiers, jint character) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->dispatchCharacter(modifiers, character);
 }
 
 JNIEXPORT jint JNICALL
-Java_org_connectbot_terminal_Terminal_nativeGetCellRun(JNIEnv* env, jobject /* thiz */,
-                             jlong ptr, jint row, jint col, jobject runObject) {
+Java_org_connectbot_terminal_TerminalNative_nativeGetCellRun(JNIEnv* env, jobject /* thiz */,
+                                                             jlong ptr, jint row, jint col, jobject runObject) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->getCellRun(env, row, col, runObject);
 }

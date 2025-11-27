@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.Color
  */
 @Stable
 class TerminalBuffer(
-    val terminal: Terminal,
+    val terminalNative: TerminalNative,
     initialRows: Int,
     initialCols: Int,
     val defaultForeground: Color = Color.White,
@@ -96,7 +96,7 @@ class TerminalBuffer(
 
         while (col < cols) {
             cellRun.reset()
-            val runLength = terminal.getCellRun(row, col, cellRun)
+            val runLength = terminalNative.getCellRun(row, col, cellRun)
 
             if (runLength <= 0) {
                 // Fill remaining with empty cells
@@ -128,6 +128,16 @@ class TerminalBuffer(
                 val combiningChars = mutableListOf<Char>()
                 charIndex++
 
+                // Handle surrogate pairs (characters > U+FFFF like emoji)
+                if (char.isHighSurrogate() && charIndex < cellRun.chars.size) {
+                    val nextChar = cellRun.chars[charIndex]
+                    if (nextChar.isLowSurrogate()) {
+                        // This is a surrogate pair - store low surrogate in combiningChars
+                        combiningChars.add(nextChar)
+                        charIndex++
+                    }
+                }
+
                 // Collect combining characters
                 while (charIndex < cellRun.chars.size && isCombiningCharacter(cellRun.chars[charIndex])) {
                     combiningChars.add(cellRun.chars[charIndex])
@@ -135,7 +145,14 @@ class TerminalBuffer(
                 }
 
                 // Determine cell width (for fullwidth characters)
-                val width = if (isFullwidthCharacter(char)) 2 else 1
+                // For surrogate pairs, check the full codepoint
+                val width = if (combiningChars.isNotEmpty() && combiningChars[0].isLowSurrogate()) {
+                    // Reconstruct codepoint from surrogate pair
+                    val codepoint = Character.toCodePoint(char, combiningChars[0])
+                    if (isFullwidthCodepoint(codepoint)) 2 else 1
+                } else {
+                    if (isFullwidthCharacter(char)) 2 else 1
+                }
 
                 cells.add(
                     TerminalLine.Cell(
@@ -206,7 +223,7 @@ class TerminalBuffer(
     fun resize(newRows: Int, newCols: Int, scrollbackRows: Int = 100) {
         rows = newRows
         cols = newCols
-        terminal.resize(newRows, newCols, scrollbackRows)
+        terminalNative.resize(newRows, newCols, scrollbackRows)
 
         // Clear and update all lines after resize
         _lines.clear()
@@ -250,7 +267,8 @@ class TerminalBuffer(
                 italic = screenCell.italic,
                 underline = screenCell.underline,
                 reverse = screenCell.reverse,
-                strike = screenCell.strike
+                strike = screenCell.strike,
+                width = screenCell.width
             )
         }
         val line = TerminalLine(row = -1, cells = cellList)  // row -1 for scrollback
@@ -318,6 +336,15 @@ class TerminalBuffer(
                eastAsianWidth == UCharacter.EastAsianWidth.WIDE
     }
 
+    /**
+     * Check if a codepoint (including those > U+FFFF) is fullwidth.
+     */
+    private fun isFullwidthCodepoint(codepoint: Int): Boolean {
+        val eastAsianWidth = UCharacter.getIntPropertyValue(codepoint, UProperty.EAST_ASIAN_WIDTH)
+        return eastAsianWidth == UCharacter.EastAsianWidth.FULLWIDTH ||
+               eastAsianWidth == UCharacter.EastAsianWidth.WIDE
+    }
+
     companion object {
         /**
          * Create a TerminalBuffer with Terminal and automatic scrollback handling.
@@ -376,9 +403,9 @@ class TerminalBuffer(
                 }
             }
 
-            val terminal = Terminal(callbacks)
+            val terminalNative = TerminalNative(callbacks)
             buffer = TerminalBuffer(
-                terminal = terminal,
+                terminalNative = terminalNative,
                 initialRows = initialRows,
                 initialCols = initialCols,
                 defaultForeground = defaultForeground,

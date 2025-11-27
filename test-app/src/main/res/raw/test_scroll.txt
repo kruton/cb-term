@@ -6,13 +6,13 @@ Line 003 - As new lines are added, older ones scroll up
 Line 004 - Fullwidth test: 日本語テスト
 Line 005 - Fullwidth test: 中文测试内容
 Line 006 - Fullwidth test: 한글테스트
-Line 007 - Colors: [31mRed[0m [32mGreen[0m [34mBlue[0m
-Line 008 - Bold: [1mThis is bold text[0m
-Line 009 - Italic: \033[3mThis is italic text[0m
-Line 010 - Underline: [4mThis is underlined[0m
-Line 011 - Mixed: [1m[31mBold Red[0m [3m[32mItalic Green[0m
-Line 012 - Reverse: [7mReverse Video[0m
-Line 013 - Strike: [9mStrikethrough[0m
+Line 007 - Colors: [31mRed[0m [32mGreen[0m [34mBlue[0m
+Line 008 - Bold: [1mThis is bold text[0m
+Line 009 - Italic: [3mThis is italic text[0m
+Line 010 - Underline: [4mThis is underlined[0m
+Line 011 - Mixed: [1m[31mBold Red[0m [3m[32mItalic Green[0m
+Line 012 - Reverse: [7mReverse Video[0m
+Line 013 - Strike: [9mStrikethrough[0m
 Line 014 - Unicode: ♠ ♣ ♥ ♦
 Line 015 - Box: ┌─┬─┐
 Line 016 - Box: │ │ │
@@ -37,13 +37,13 @@ Line 034 - Chess White: ♔ ♕ ♖ ♗ ♘ ♙
 Line 035 - Chess Black: ♚ ♛ ♜ ♝ ♞ ♟
 Line 036 - Cards: 🂡 🂢 🂣 🂤 🂥 🂦 🂧 🂨 🂩 🂪 🂫 🂬 🂭 🂮
 Line 037 - Mahjong: 🀀 🀁 🀂 🀃 🀄 🀅 🀆
-Line 038 - Backgrounds: [41m Red [42m Green [43m Yellow [44m Blue [0m
-Line 039 - Bright FG: [91mBright Red[0m [92mBright Green[0m
-Line 040 - Bright BG: [101m B-Red [102m B-Green [104m B-Blue [0m
-Line 041 - Dim Text: [2mThis text is dim/faint[0m
-Line 042 - Blink: [5mThis text might blink[0m
-Line 043 - Hidden: [8m(Hidden)[0m <--- Hidden text
-Line 044 - Overline: [53mThis is overlined[0m
+Line 038 - Backgrounds: [41m Red [42m Green [43m Yellow [44m Blue [0m
+Line 039 - Bright FG: [91mBright Red[0m [92mBright Green[0m
+Line 040 - Bright BG: [101m B-Red [102m B-Green [104m B-Blue [0m
+Line 041 - Dim Text: [2mThis text is dim/faint[0m
+Line 042 - Blink: [5mThis text might blink[0m
+Line 043 - Hidden: [8m(Hidden)[0m <--- Hidden text
+Line 044 - Overline: [53mThis is overlined[0m
 Line 045 - Emoji: 😀 😂 🤣 😍 😎 🥳 😡 😱
 Line 046 - Animals: 🐈 🐕 🦊 🦄 🐸 🐵 🐔 🐧
 Line 047 - Food: 🍎 🍔 🍕 🍣 🍩 🍪 🍺 🍷
