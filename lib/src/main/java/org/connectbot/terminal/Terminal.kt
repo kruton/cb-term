@@ -96,6 +96,7 @@ private enum class GestureType {
  *
  * @param terminalBuffer The terminal buffer containing screen state
  * @param modifier Modifier for the composable
+ * @param typeface Typeface for terminal text (default: Typeface.MONOSPACE)
  * @param initialFontSize Initial font size for terminal text (can be changed with pinch-to-zoom)
  * @param minFontSize Minimum font size for pinch-to-zoom
  * @param maxFontSize Maximum font size for pinch-to-zoom
@@ -107,6 +108,7 @@ private enum class GestureType {
 fun Terminal(
     terminalBuffer: TerminalBuffer,
     modifier: Modifier = Modifier,
+    typeface: Typeface = Typeface.MONOSPACE,
     initialFontSize: TextUnit = 11.sp,
     minFontSize: TextUnit = 6.sp,
     maxFontSize: TextUnit = 30.sp,
@@ -139,9 +141,9 @@ fun Terminal(
     }
 
     // Create TextPaint for measuring and drawing (base size)
-    val textPaint = remember(fontSize) {
+    val textPaint = remember(typeface, fontSize) {
         TextPaint().apply {
-            typeface = Typeface.MONOSPACE
+            this.typeface = typeface
             textSize = with(density) { fontSize.toPx() }
             isAntiAlias = true
         }

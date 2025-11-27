@@ -16,6 +16,7 @@
  */
 package org.connectbot.terminal.testapp
 
+import android.graphics.Typeface
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
@@ -47,6 +48,16 @@ fun ShellScreen() {
     var terminalNative by remember { mutableStateOf<TerminalNative?>(null) }
     var currentTest by remember { mutableStateOf("Welcome") }
     var keyboardEnabled by remember { mutableStateOf(false) }
+
+    // Font selection
+    val availableFonts = remember {
+        mapOf(
+            "Monospace" to Typeface.MONOSPACE,
+            "0xProto" to Typeface.createFromAsset(context.assets, "fonts/0xProtoNerdFontMono-Regular.ttf")
+        )
+    }
+    var selectedFont by remember { mutableStateOf("0xProto Regular") }
+    var showFontMenu by remember { mutableStateOf(false) }
 
     // Initialize terminal once
     DisposableEffect(Unit) {
@@ -240,37 +251,66 @@ fun ShellScreen() {
             }
         }
 
-        // Second row with keyboard toggle
+        // Second row with font selector and keyboard toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconToggleButton(
-                checked = keyboardEnabled,
-                onCheckedChange = { keyboardEnabled = it }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Keyboard,
-                    contentDescription = "Toggle Keyboard Input",
-                    tint = if (keyboardEnabled)
+            // Font selector
+            Box {
+                Button(
+                    onClick = { showFontMenu = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                ) {
+                    Text("Font: $selectedFont")
+                }
+                DropdownMenu(
+                    expanded = showFontMenu,
+                    onDismissRequest = { showFontMenu = false }
+                ) {
+                    availableFonts.keys.forEach { fontName ->
+                        DropdownMenuItem(
+                            text = { Text(fontName) },
+                            onClick = {
+                                selectedFont = fontName
+                                showFontMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Keyboard toggle
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconToggleButton(
+                    checked = keyboardEnabled,
+                    onCheckedChange = { keyboardEnabled = it }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Keyboard,
+                        contentDescription = "Toggle Keyboard Input",
+                        tint = if (keyboardEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(
+                    text = if (keyboardEnabled) "Keyboard: ON" else "Keyboard: OFF",
+                    modifier = Modifier.padding(start = 8.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (keyboardEnabled)
                         MaterialTheme.colorScheme.primary
                     else
                         MaterialTheme.colorScheme.onSurface
                 )
             }
-            Text(
-                text = if (keyboardEnabled) "Keyboard: ON" else "Keyboard: OFF",
-                modifier = Modifier
-                    .align(Alignment.CenterVertically)
-                    .padding(start = 8.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (keyboardEnabled)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurface
-            )
         }
 
         HorizontalDivider()
@@ -300,6 +340,7 @@ fun ShellScreen() {
                     Terminal(
                         terminalBuffer = terminalBuffer!!,
                         modifier = Modifier.fillMaxSize(),
+                        typeface = availableFonts[selectedFont] ?: Typeface.MONOSPACE,
                         backgroundColor = Color.Black,
                         foregroundColor = Color(0xFFD0D0D0), // Light gray for better readability
                         keyboardEnabled = keyboardEnabled
