@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 #include "Terminal.h"
+#include "mutf8.h"
 #include <android/log.h>
 #include <cstring>
 #include <algorithm>
@@ -440,9 +441,11 @@ void Terminal::invokeSetTermProp(VTermProp prop, VTermValue* val) {
             constructor = env->GetMethodID(propClass, "<init>", "(Ljava/lang/String;)V");
             if (val->string.str) {
                 // VTermStringFragment has str and len fields
-                jstring str = env->NewStringUTF(val->string.str);
+                char* utf8_str = mutf8_to_utf8(val->string.str, val->string.len, nullptr);
+                jstring str = env->NewStringUTF(utf8_str);
                 propValue = env->NewObject(propClass, constructor, str);
                 env->DeleteLocalRef(str);
+                free(utf8_str);
             }
             break;
 

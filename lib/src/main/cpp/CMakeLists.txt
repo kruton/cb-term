@@ -26,6 +26,7 @@ target_compile_definitions(vterm PRIVATE
 # JNI wrapper library
 add_library(jni_cb_term SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/Terminal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mutf8.cpp
 )
 
 target_include_directories(jni_cb_term PRIVATE
