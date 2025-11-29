@@ -105,6 +105,7 @@ private enum class GestureType {
  * @param foregroundColor Default foreground color
  * @param keyboardEnabled Enable keyboard input handling (default: false for display-only mode)
  * @param focusRequester Focus requester for keyboard input (if enabled)
+ * @param onTerminalTap Callback for a simple tap event on the terminal (when no selection is active)
  * @param forcedSize Force terminal to specific dimensions (rows, cols). When set, font size is calculated to fit.
  */
 @Composable
@@ -119,6 +120,7 @@ fun Terminal(
     foregroundColor: Color = Color.White,
     keyboardEnabled: Boolean = false,
     focusRequester: FocusRequester = remember { FocusRequester() },
+    onTerminalTap: () -> Unit = {},
     forcedSize: Pair<Int, Int>? = null
 ) {
     val density = LocalDensity.current
@@ -519,9 +521,12 @@ fun Terminal(
                                         }
 
                                         GestureType.Undetermined -> {
-                                            // Tap - clear selection if exists
+                                            // This is a tap. If a selection is active, clear it.
+                                            // Otherwise, forward the tap.
                                             if (selectionManager.mode != SelectionMode.NONE) {
                                                 selectionManager.clearSelection()
+                                            } else {
+                                                onTerminalTap()
                                             }
                                         }
 
