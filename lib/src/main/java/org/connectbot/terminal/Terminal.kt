@@ -139,18 +139,18 @@ fun Terminal(
     }
 
     // Font size and zoom state
-    var zoomScale by remember { mutableStateOf(1f) }
-    var zoomOffset by remember { mutableStateOf(Offset.Zero) }
-    var zoomOrigin by remember { mutableStateOf(TransformOrigin.Center) }
-    var isZooming by remember { mutableStateOf(false) }
-    var calculatedFontSize by remember { mutableStateOf(initialFontSize) }
+    var zoomScale by remember(terminalEmulator) { mutableStateOf(1f) }
+    var zoomOffset by remember(terminalEmulator) { mutableStateOf(Offset.Zero) }
+    var zoomOrigin by remember(terminalEmulator) { mutableStateOf(TransformOrigin.Center) }
+    var isZooming by remember(terminalEmulator) { mutableStateOf(false) }
+    var calculatedFontSize by remember(terminalEmulator) { mutableStateOf(initialFontSize) }
 
     // Magnifying glass state
-    var showMagnifier by remember { mutableStateOf(false) }
-    var magnifierPosition by remember { mutableStateOf(Offset.Zero) }
+    var showMagnifier by remember(terminalEmulator) { mutableStateOf(false) }
+    var magnifierPosition by remember(terminalEmulator) { mutableStateOf(Offset.Zero) }
 
     // Cursor blink state
-    var cursorBlinkVisible by remember { mutableStateOf(true) }
+    var cursorBlinkVisible by remember(terminalEmulator) { mutableStateOf(true) }
 
     // Request focus when keyboard is enabled
     LaunchedEffect(keyboardEnabled) {
@@ -209,13 +209,13 @@ fun Terminal(
     val charBaseline = baseCharBaseline * zoomScale
 
     // Scroll animation state
-    val scrollOffset = remember { Animatable(0f) }
+    val scrollOffset = remember(terminalEmulator) { Animatable(0f) }
     val maxScroll = remember(screenState.snapshot.scrollback.size, baseCharHeight) {
         screenState.snapshot.scrollback.size * baseCharHeight
     }
 
     // Selection manager
-    val selectionManager = remember {
+    val selectionManager = remember(terminalEmulator) {
         SelectionManager()
     }
 
@@ -330,7 +330,7 @@ fun Terminal(
                             scaleY = zoomScale
                             transformOrigin = zoomOrigin
                         }
-                        .pointerInput(Unit) {
+                        .pointerInput(terminalEmulator, baseCharHeight) {
                             coroutineScope {
                                 awaitEachGesture {
                                     var gestureType: GestureType = GestureType.Undetermined
@@ -507,7 +507,7 @@ fun Terminal(
 
                                                 // Update terminal buffer scrollback position
                                                 val scrolledLines =
-                                                    (scrollOffset.value / baseCharHeight).toInt()
+                                                    (newOffset / baseCharHeight).toInt()
                                                 screenState.scrollBy(scrolledLines - screenState.scrollbackPosition)
                                             }
 
