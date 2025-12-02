@@ -147,6 +147,38 @@ class TerminalNative(private val callbacks: TerminalCallbacks) : AutoCloseable {
     }
 
     /**
+     * Set ANSI palette colors (indices 0-15).
+     *
+     * This configures the 16 ANSI colors used by terminal escape sequences.
+     * Changing the palette triggers a full redraw with the new colors.
+     *
+     * @param colors IntArray of ARGB colors (must have at least 'count' elements)
+     * @param count Number of colors to set (max 16, default: min(colors.size, 16))
+     * @return Number of colors set, or -1 on error
+     */
+    fun setPaletteColors(colors: IntArray, count: Int = colors.size.coerceAtMost(16)): Int {
+        checkNotClosed()
+        require(count <= 16) { "Can only set up to 16 ANSI palette colors" }
+        require(colors.size >= count) { "Color array too small for requested count" }
+        return nativeSetPaletteColors(nativePtr, colors, count)
+    }
+
+    /**
+     * Set default foreground and background colors.
+     *
+     * These colors are used when terminal content explicitly requests "default" color
+     * (different from ANSI color 7/0). Changing default colors triggers a full redraw.
+     *
+     * @param foreground ARGB foreground color
+     * @param background ARGB background color
+     * @return 0 on success, -1 on error
+     */
+    fun setDefaultColors(foreground: Int, background: Int): Int {
+        checkNotClosed()
+        return nativeSetDefaultColors(nativePtr, foreground, background)
+    }
+
+    /**
      * Close the terminal and release native resources.
      * After calling this, the Terminal instance cannot be used.
      */
@@ -181,6 +213,8 @@ class TerminalNative(private val callbacks: TerminalCallbacks) : AutoCloseable {
     private external fun nativeDispatchKey(ptr: Long, modifiers: Int, key: Int): Boolean
     private external fun nativeDispatchCharacter(ptr: Long, modifiers: Int, character: Int): Boolean
     private external fun nativeGetCellRun(ptr: Long, row: Int, col: Int, run: CellRun): Int
+    private external fun nativeSetPaletteColors(ptr: Long, colors: IntArray, count: Int): Int
+    private external fun nativeSetDefaultColors(ptr: Long, fgColor: Int, bgColor: Int): Int
 
     companion object {
         init {

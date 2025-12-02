@@ -43,6 +43,10 @@ public:
     // Cell data retrieval for rendering
     int getCellRun(JNIEnv* env, int row, int col, jobject runObject);
 
+    // Color configuration
+    int setPaletteColors(const uint32_t* colors, int count);
+    int setDefaultColors(uint32_t fgColor, uint32_t bgColor);
+
 private:
     // libvterm screen callbacks (called by libvterm)
     static int termDamage(VTermRect rect, void* user);

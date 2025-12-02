@@ -192,6 +192,78 @@ int Terminal::resize(int rows, int cols, int scrollRows) {
     return 0;
 }
 
+// Color configuration
+int Terminal::setPaletteColors(const uint32_t* colors, int count) {
+    std::lock_guard<std::recursive_mutex> lock(mLock);
+
+    if (!mVt) {
+        LOGE("setPaletteColors: VTerm not initialized");
+        return -1;
+    }
+
+    VTermState* state = vterm_obtain_state(mVt);
+    if (!state) {
+        LOGE("setPaletteColors: Failed to obtain VTermState");
+        return -1;
+    }
+
+    // Only set ANSI colors (0-15)
+    int colorCount = std::min(count, 16);
+
+    for (int i = 0; i < colorCount; i++) {
+        VTermColor vtColor;
+
+        // Convert ARGB to RGB (libvterm uses RGB, Android uses ARGB 0xAARRGGBB)
+        vterm_color_rgb(&vtColor,
+                       (colors[i] >> 16) & 0xFF,  // Red
+                       (colors[i] >> 8) & 0xFF,   // Green
+                       colors[i] & 0xFF);         // Blue
+
+        vterm_state_set_palette_color(state, i, &vtColor);
+    }
+
+    // Trigger full redraw after palette change
+    invokeDamage(0, mRows, 0, mCols);
+
+    return colorCount;
+}
+
+int Terminal::setDefaultColors(uint32_t fgColor, uint32_t bgColor) {
+    std::lock_guard<std::recursive_mutex> lock(mLock);
+
+    if (!mVt) {
+        LOGE("setDefaultColors: VTerm not initialized");
+        return -1;
+    }
+
+    VTermState* state = vterm_obtain_state(mVt);
+    if (!state) {
+        LOGE("setDefaultColors: Failed to obtain VTermState");
+        return -1;
+    }
+
+    // Convert ARGB to RGB for foreground
+    VTermColor vtFg;
+    vterm_color_rgb(&vtFg,
+                   (fgColor >> 16) & 0xFF,  // Red
+                   (fgColor >> 8) & 0xFF,   // Green
+                   fgColor & 0xFF);         // Blue
+
+    // Convert ARGB to RGB for background
+    VTermColor vtBg;
+    vterm_color_rgb(&vtBg,
+                   (bgColor >> 16) & 0xFF,  // Red
+                   (bgColor >> 8) & 0xFF,   // Green
+                   bgColor & 0xFF);         // Blue
+
+    vterm_state_set_default_colors(state, &vtFg, &vtBg);
+
+    // Trigger full redraw
+    invokeDamage(0, mRows, 0, mCols);
+
+    return 0;
+}
+
 // Keyboard input handlers
 bool Terminal::dispatchKey(int modifiers, int key) {
     std::lock_guard<std::recursive_mutex> lock(mLock);
@@ -677,11 +749,21 @@ void Terminal::resolveColor(const VTermColor& color, uint8_t& r, uint8_t& g, uin
         g = color.rgb.green;
         b = color.rgb.blue;
     } else if (VTERM_COLOR_IS_DEFAULT_FG(&color)) {
-        // Use default foreground (white)
-        r = g = b = 255;
+        // Get configured default foreground from libvterm
+        VTermState* state = vterm_obtain_state(mVt);
+        VTermColor fg, bg;
+        vterm_state_get_default_colors(state, &fg, &bg);
+        r = fg.rgb.red;
+        g = fg.rgb.green;
+        b = fg.rgb.blue;
     } else if (VTERM_COLOR_IS_DEFAULT_BG(&color)) {
-        // Use default background (black)
-        r = g = b = 0;
+        // Get configured default background from libvterm
+        VTermState* state = vterm_obtain_state(mVt);
+        VTermColor fg, bg;
+        vterm_state_get_default_colors(state, &fg, &bg);
+        r = bg.rgb.red;
+        g = bg.rgb.green;
+        b = bg.rgb.blue;
     } else {
         // Fallback
         r = g = b = 128;
@@ -771,6 +853,34 @@ Java_org_connectbot_terminal_TerminalNative_nativeGetCellRun(JNIEnv* env, jobjec
                                                              jlong ptr, jint row, jint col, jobject runObject) {
     auto* term = reinterpret_cast<Terminal*>(ptr);
     return term->getCellRun(env, row, col, runObject);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_connectbot_terminal_TerminalNative_nativeSetPaletteColors(JNIEnv* env, jobject /* thiz */,
+                                                                   jlong ptr, jintArray colors, jint count) {
+    auto* term = reinterpret_cast<Terminal*>(ptr);
+
+    // Get array elements
+    jint* colorData = env->GetIntArrayElements(colors, nullptr);
+    if (!colorData) {
+        LOGE("nativeSetPaletteColors: Failed to get array elements");
+        return -1;
+    }
+
+    // Convert to uint32_t array and call native method
+    int result = term->setPaletteColors(reinterpret_cast<const uint32_t*>(colorData), count);
+
+    // Release array (JNI_ABORT = don't copy back, read-only)
+    env->ReleaseIntArrayElements(colors, colorData, JNI_ABORT);
+
+    return result;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_connectbot_terminal_TerminalNative_nativeSetDefaultColors(JNIEnv* /* env */, jobject /* thiz */,
+                                                                   jlong ptr, jint fgColor, jint bgColor) {
+    auto* term = reinterpret_cast<Terminal*>(ptr);
+    return term->setDefaultColors(static_cast<uint32_t>(fgColor), static_cast<uint32_t>(bgColor));
 }
 
 } // extern "C"

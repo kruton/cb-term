@@ -179,6 +179,60 @@ class TerminalEmulator(
      */
     fun clearScreen() = writeInput("\u001B[2J\u001B[H".toByteArray())
 
+    /**
+     * Set ANSI palette colors (indices 0-15).
+     *
+     * This configures the 16 ANSI colors used by terminal escape sequences.
+     * Changing the palette triggers a full redraw with new colors.
+     *
+     * @param ansiColors IntArray of ARGB colors (size 16 for all ANSI colors)
+     * @return Number of colors set, or -1 on error
+     */
+    fun setAnsiPalette(ansiColors: IntArray): Int {
+        require(ansiColors.size >= 16) {
+            "ANSI palette must contain 16 colors"
+        }
+        return terminalNative.setPaletteColors(ansiColors, 16)
+    }
+
+    /**
+     * Set default terminal colors.
+     *
+     * These colors are used when terminal content explicitly requests
+     * "default" foreground or background (different from ANSI color 7/0).
+     * Changing default colors triggers a full redraw.
+     *
+     * @param foreground ARGB foreground color
+     * @param background ARGB background color
+     * @return 0 on success, -1 on error
+     */
+    fun setDefaultColors(foreground: Int, background: Int): Int {
+        return terminalNative.setDefaultColors(foreground, background)
+    }
+
+    /**
+     * Apply a complete color scheme to the terminal.
+     *
+     * Convenience method that sets both ANSI palette and default colors
+     * from a color scheme. This is the recommended way to apply themes.
+     *
+     * @param ansiColors IntArray of 16 ARGB colors for ANSI palette
+     * @param defaultForeground ARGB color for default foreground
+     * @param defaultBackground ARGB color for default background
+     */
+    fun applyColorScheme(
+        ansiColors: IntArray,
+        defaultForeground: Int,
+        defaultBackground: Int
+    ) {
+        require(ansiColors.size >= 16) {
+            "Color scheme must provide 16 ANSI colors"
+        }
+
+        setAnsiPalette(ansiColors)
+        setDefaultColors(defaultForeground, defaultBackground)
+    }
+
     // ================================================================================
     // TerminalCallbacks implementation
     // ================================================================================
