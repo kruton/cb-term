@@ -35,6 +35,17 @@ interface TerminalCallbacks {
     fun damage(startRow: Int, endRow: Int, startCol: Int, endCol: Int): Int
 
     /**
+     * Called when a rectangular region needs to be moved/scrolled.
+     * This is an optimization hint - the implementation can copy the content from src to dest
+     * instead of redrawing. If not implemented, return 0 and libvterm will use damage events.
+     *
+     * @param dest Destination rectangle
+     * @param src Source rectangle
+     * @return 1 if handled, 0 to fall back to damage events
+     */
+    fun moverect(dest: TermRect, src: TermRect): Int
+
+    /**
      * Called when cursor position changes.
      *
      * @param pos Current cursor position
@@ -87,6 +98,16 @@ interface TerminalCallbacks {
      */
     fun onKeyboardInput(data: ByteArray): Int
 }
+
+/**
+ * Rectangular region in the terminal.
+ */
+data class TermRect(
+    val startRow: Int,
+    val endRow: Int,
+    val startCol: Int,
+    val endCol: Int
+)
 
 /**
  * Cursor position in the terminal.

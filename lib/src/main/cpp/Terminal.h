@@ -62,6 +62,7 @@ private:
 
     // Java callback invocation helpers
     void invokeDamage(int startRow, int endRow, int startCol, int endCol);
+    int invokeMoverect(VTermRect dest, VTermRect src);
     void invokeMoveCursor(int row, int col, int oldRow, int oldCol, bool visible);
     void invokeSetTermProp(VTermProp prop, VTermValue* val);
     void invokeBell();
@@ -87,6 +88,7 @@ private:
     JavaVM* mJavaVM{};
     jobject mCallbacks;  // Global reference
     jmethodID mDamageMethod;
+    jmethodID mMoverectMethod;
     jmethodID mMoveCursorMethod;
     jmethodID mSetTermPropMethod;
     jmethodID mBellMethod;

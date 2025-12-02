@@ -44,6 +44,11 @@ Terminal::Terminal(JNIEnv* env, jobject callbacks, int rows, int cols, int scrol
         LOGE("Failed to find damage method");
         env->ExceptionClear();
     }
+    mMoverectMethod = env->GetMethodID(callbacksClass, "moverect",
+        "(Lorg/connectbot/terminal/TermRect;Lorg/connectbot/terminal/TermRect;)I");
+    if (!mMoverectMethod) {
+        LOGE("Failed to find moverect method");
+    }
     mMoveCursorMethod = env->GetMethodID(callbacksClass, "moveCursor",
         "(Lorg/connectbot/terminal/CursorPosition;Lorg/connectbot/terminal/CursorPosition;Z)I");
     if (!mMoveCursorMethod) {
@@ -393,8 +398,8 @@ int Terminal::termDamage(VTermRect rect, void* user) {
 }
 
 int Terminal::termMoverect(VTermRect dest, VTermRect src, void* user) {
-    // Not currently used, but could optimize scrolling
-    return 1;
+    auto* term = static_cast<Terminal*>(user);
+    return term->invokeMoverect(dest, src);
 }
 
 int Terminal::termMovecursor(VTermPos pos, VTermPos oldpos, int visible, void* user) {
@@ -443,6 +448,46 @@ void Terminal::invokeDamage(int startRow, int endRow, int startCol, int endCol) 
     }
 
     env->CallIntMethod(mCallbacks, mDamageMethod, startRow, endRow, startCol, endCol);
+}
+
+int Terminal::invokeMoverect(VTermRect dest, VTermRect src) {
+    if (!mMoverectMethod) {
+        return 0;
+    }
+
+    JNIEnv* env;
+    if (mJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        return 0;
+    }
+
+    // Find TermRect class
+    jclass rectClass = env->FindClass("org/connectbot/terminal/TermRect");
+    if (!rectClass) {
+        return 0;
+    }
+
+    // Get TermRect constructor (startRow, endRow, startCol, endCol)
+    jmethodID rectConstructor = env->GetMethodID(rectClass, "<init>", "(IIII)V");
+    if (!rectConstructor) {
+        env->DeleteLocalRef(rectClass);
+        return 0;
+    }
+
+    // Create dest and src TermRect objects
+    jobject destObj = env->NewObject(rectClass, rectConstructor,
+        dest.start_row, dest.end_row, dest.start_col, dest.end_col);
+    jobject srcObj = env->NewObject(rectClass, rectConstructor,
+        src.start_row, src.end_row, src.start_col, src.end_col);
+
+    // Call the moverect callback
+    jint result = env->CallIntMethod(mCallbacks, mMoverectMethod, destObj, srcObj);
+
+    // Clean up
+    env->DeleteLocalRef(destObj);
+    env->DeleteLocalRef(srcObj);
+    env->DeleteLocalRef(rectClass);
+
+    return result;
 }
 
 void Terminal::invokeMoveCursor(int row, int col, int oldRow, int oldCol, bool visible) {

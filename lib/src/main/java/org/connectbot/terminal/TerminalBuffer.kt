@@ -218,6 +218,41 @@ class TerminalBuffer(
     }
 
     /**
+     * Move/copy a rectangular region (optimization for scrolling).
+     * This is called when libvterm wants to scroll content by copying it.
+     */
+    internal fun moveRect(dest: TermRect, src: TermRect) {
+        // Copy lines from src to dest
+        // This is typically used for scrolling - moving existing lines up or down
+        val numRows = src.endRow - src.startRow
+
+        if (src.startCol == 0 && src.endCol == cols && dest.startCol == 0 && dest.endCol == cols) {
+            // Full-width move - we can copy entire lines
+            if (dest.startRow < src.startRow) {
+                // Moving up - copy from top to bottom
+                for (i in 0 until numRows) {
+                    val srcRow = src.startRow + i
+                    val destRow = dest.startRow + i
+                    _lines[destRow] = _lines[srcRow]?.copy(row = destRow)
+                        ?: TerminalLine.empty(destRow, cols, defaultForeground, defaultBackground)
+                }
+            } else {
+                // Moving down - copy from bottom to top
+                for (i in (numRows - 1) downTo 0) {
+                    val srcRow = src.startRow + i
+                    val destRow = dest.startRow + i
+                    _lines[destRow] = _lines[srcRow]?.copy(row = destRow)
+                        ?: TerminalLine.empty(destRow, cols, defaultForeground, defaultBackground)
+                }
+            }
+        } else {
+            // Partial-width move - would need to copy cells within lines
+            // For now, just mark the destination region as damaged and let it re-render
+            updateRegion(dest.startRow, dest.endRow, dest.startCol, dest.endCol)
+        }
+    }
+
+    /**
      * Resize the terminal.
      */
     fun resize(newRows: Int, newCols: Int, scrollbackRows: Int = 100) {
@@ -434,6 +469,11 @@ class TerminalBuffer(
                 override fun damage(startRow: Int, endRow: Int, startCol: Int, endCol: Int): Int {
                     buffer?.updateRegion(startRow, endRow, startCol, endCol)
                     return 0
+                }
+
+                override fun moverect(dest: TermRect, src: TermRect): Int {
+                    buffer?.moveRect(dest, src)
+                    return 1
                 }
 
                 override fun moveCursor(pos: CursorPosition, oldPos: CursorPosition, visible: Boolean): Int {

@@ -248,6 +248,12 @@ class TerminalEmulator(
         return 0
     }
 
+    override fun moverect(dest: TermRect, src: TermRect): Int {
+        // For now, treat moverect as a damage region on the destination
+        // A more sophisticated implementation could optimize by copying the screen content
+        return damage(dest.startRow, dest.endRow, dest.startCol, dest.endCol)
+    }
+
     override fun moveCursor(pos: CursorPosition, oldPos: CursorPosition, visible: Boolean): Int {
         synchronized(damageLock) {
             cursorRow = pos.row
