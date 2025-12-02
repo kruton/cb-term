@@ -66,6 +66,7 @@ private:
     void invokeSetTermProp(VTermProp prop, VTermValue* val);
     void invokeBell();
     void invokePushScrollbackLine(int cols, const VTermScreenCell* cells);
+    int invokePopScrollbackLine(int cols, VTermScreenCell* cells);
     void invokeKeyboardOutput(const char* data, size_t len);
 
     // Helper functions

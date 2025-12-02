@@ -422,12 +422,8 @@ int Terminal::termSbPushline(int cols, const VTermScreenCell* cells, void* user)
 }
 
 int Terminal::termSbPopline(int cols, VTermScreenCell* cells, void* user) {
-    // Note: We don't support popping from scrollback because:
-    // 1. Scrollback is managed in Kotlin layer
-    // 2. Calling back to Kotlin here would cause deadlock (mutex is held)
-    // 3. libvterm rarely needs to pop scrollback
-    // If we need this in the future, we'd need to defer the callback or use a different approach
-    return 0;  // Indicate no scrollback available
+    auto* term = static_cast<Terminal*>(user);
+    return term->invokePopScrollbackLine(cols, cells);
 }
 
 void Terminal::termOutput(const char* s, size_t len, void* user) {
@@ -700,6 +696,140 @@ void Terminal::invokePushScrollbackLine(int cols, const VTermScreenCell* cells) 
     env->DeleteLocalRef(screenCellClass);
     env->DeleteLocalRef(arrayListClass);
     env->DeleteLocalRef(charClass);
+}
+
+int Terminal::invokePopScrollbackLine(int cols, VTermScreenCell* cells) {
+    if (!mPopScrollbackMethod) {
+        return 0;
+    }
+
+    JNIEnv* env;
+    if (mJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        return 0;
+    }
+
+    // Find ScreenCell class
+    jclass screenCellClass = env->FindClass("org/connectbot/terminal/ScreenCell");
+    if (!screenCellClass) {
+        LOGE("Failed to find ScreenCell class");
+        return 0;
+    }
+
+    // Create array for cells
+    jobjectArray cellArray = env->NewObjectArray(cols, screenCellClass, nullptr);
+    if (!cellArray) {
+        LOGE("Failed to create cell array");
+        env->DeleteLocalRef(screenCellClass);
+        return 0;
+    }
+
+    // Call the Java callback to fill the array
+    jint result = env->CallIntMethod(mCallbacks, mPopScrollbackMethod, cols, cellArray);
+
+    if (result == 0) {
+        // No scrollback available
+        env->DeleteLocalRef(cellArray);
+        env->DeleteLocalRef(screenCellClass);
+        return 0;
+    }
+
+    // Get field IDs for ScreenCell
+    jfieldID charField = env->GetFieldID(screenCellClass, "char", "C");
+    jfieldID combiningCharsField = env->GetFieldID(screenCellClass, "combiningChars", "Ljava/util/List;");
+    jfieldID fgRedField = env->GetFieldID(screenCellClass, "fgRed", "I");
+    jfieldID fgGreenField = env->GetFieldID(screenCellClass, "fgGreen", "I");
+    jfieldID fgBlueField = env->GetFieldID(screenCellClass, "fgBlue", "I");
+    jfieldID bgRedField = env->GetFieldID(screenCellClass, "bgRed", "I");
+    jfieldID bgGreenField = env->GetFieldID(screenCellClass, "bgGreen", "I");
+    jfieldID bgBlueField = env->GetFieldID(screenCellClass, "bgBlue", "I");
+    jfieldID boldField = env->GetFieldID(screenCellClass, "bold", "Z");
+    jfieldID italicField = env->GetFieldID(screenCellClass, "italic", "Z");
+    jfieldID underlineField = env->GetFieldID(screenCellClass, "underline", "I");
+    jfieldID reverseField = env->GetFieldID(screenCellClass, "reverse", "Z");
+    jfieldID strikeField = env->GetFieldID(screenCellClass, "strike", "Z");
+    jfieldID widthField = env->GetFieldID(screenCellClass, "width", "I");
+
+    // Get List methods for combining chars
+    jclass listClass = env->FindClass("java/util/List");
+    jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
+    jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+    jclass charClass = env->FindClass("java/lang/Character");
+    jmethodID charValue = env->GetMethodID(charClass, "charValue", "()C");
+
+    // Convert Java ScreenCell array to VTermScreenCell
+    for (int i = 0; i < cols; i++) {
+        jobject screenCell = env->GetObjectArrayElement(cellArray, i);
+        if (!screenCell) {
+            // Initialize empty cell
+            VTermScreenCell& cell = cells[i];
+            cell.chars[0] = ' ';
+            for (int j = 1; j < VTERM_MAX_CHARS_PER_CELL; j++) {
+                cell.chars[j] = 0;
+            }
+            cell.width = 1;
+            cell.attrs.bold = 0;
+            cell.attrs.italic = 0;
+            cell.attrs.underline = 0;
+            cell.attrs.reverse = 0;
+            cell.attrs.strike = 0;
+            vterm_color_rgb(&cell.fg, 192, 192, 192);
+            vterm_color_rgb(&cell.bg, 0, 0, 0);
+            continue;
+        }
+
+        VTermScreenCell& cell = cells[i];
+
+        // Get primary character
+        jchar primaryChar = env->GetCharField(screenCell, charField);
+        cell.chars[0] = primaryChar;
+
+        // Get combining characters
+        jobject combiningList = env->GetObjectField(screenCell, combiningCharsField);
+        int charIndex = 1;
+        if (combiningList) {
+            jint listLen = env->CallIntMethod(combiningList, listSize);
+            for (int j = 0; j < listLen && charIndex < VTERM_MAX_CHARS_PER_CELL; j++) {
+                jobject charObj = env->CallObjectMethod(combiningList, listGet, j);
+                if (charObj) {
+                    jchar ch = env->CallCharMethod(charObj, charValue);
+                    cell.chars[charIndex++] = ch;
+                    env->DeleteLocalRef(charObj);
+                }
+            }
+        }
+        // Fill remaining with zeros
+        for (; charIndex < VTERM_MAX_CHARS_PER_CELL; charIndex++) {
+            cell.chars[charIndex] = 0;
+        }
+
+        // Get colors
+        uint8_t fgRed = env->GetIntField(screenCell, fgRedField);
+        uint8_t fgGreen = env->GetIntField(screenCell, fgGreenField);
+        uint8_t fgBlue = env->GetIntField(screenCell, fgBlueField);
+        uint8_t bgRed = env->GetIntField(screenCell, bgRedField);
+        uint8_t bgGreen = env->GetIntField(screenCell, bgGreenField);
+        uint8_t bgBlue = env->GetIntField(screenCell, bgBlueField);
+        vterm_color_rgb(&cell.fg, fgRed, fgGreen, fgBlue);
+        vterm_color_rgb(&cell.bg, bgRed, bgGreen, bgBlue);
+
+        // Get attributes
+        cell.attrs.bold = env->GetBooleanField(screenCell, boldField);
+        cell.attrs.italic = env->GetBooleanField(screenCell, italicField);
+        cell.attrs.underline = env->GetIntField(screenCell, underlineField);
+        cell.attrs.reverse = env->GetBooleanField(screenCell, reverseField);
+        cell.attrs.strike = env->GetBooleanField(screenCell, strikeField);
+        cell.width = env->GetIntField(screenCell, widthField);
+
+        env->DeleteLocalRef(screenCell);
+    }
+
+    // Clean up
+    env->DeleteLocalRef(cellArray);
+    env->DeleteLocalRef(screenCellClass);
+    env->DeleteLocalRef(listClass);
+    env->DeleteLocalRef(charClass);
+
+    return 1;
 }
 
 void Terminal::invokeKeyboardOutput(const char* data, size_t len) {

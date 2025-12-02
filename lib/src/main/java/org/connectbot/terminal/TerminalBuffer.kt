@@ -282,6 +282,69 @@ class TerminalBuffer(
     }
 
     /**
+     * Pop a line from scrollback buffer (called during resize when terminal needs to restore lines).
+     * Converts TerminalLine back to raw ScreenCell data for libvterm.
+     * Returns true if a line was available and popped, false otherwise.
+     */
+    internal fun popScrollbackLine(cols: Int, cells: Array<ScreenCell>): Boolean {
+        if (_scrollback.isEmpty()) {
+            return false
+        }
+
+        // Remove the last line from scrollback (most recent)
+        val line = _scrollback.removeAt(_scrollback.size - 1)
+
+        // Adjust scrollback position if we're currently scrolled
+        if (scrollbackPosition > 0) {
+            scrollbackPosition = (scrollbackPosition - 1).coerceAtLeast(0)
+        }
+
+        // Copy the line's cells into the provided array
+        val colsToCopy = minOf(cols, line.cells.size)
+        for (i in 0 until colsToCopy) {
+            val cell = line.cells[i]
+            cells[i] = ScreenCell(
+                char = cell.char,
+                combiningChars = cell.combiningChars,
+                fgRed = (cell.fgColor.red * 255).toInt(),
+                fgGreen = (cell.fgColor.green * 255).toInt(),
+                fgBlue = (cell.fgColor.blue * 255).toInt(),
+                bgRed = (cell.bgColor.red * 255).toInt(),
+                bgGreen = (cell.bgColor.green * 255).toInt(),
+                bgBlue = (cell.bgColor.blue * 255).toInt(),
+                bold = cell.bold,
+                italic = cell.italic,
+                underline = cell.underline,
+                reverse = cell.reverse,
+                strike = cell.strike,
+                width = cell.width
+            )
+        }
+
+        // Fill remaining cells with empty cells if line was shorter than cols
+        for (i in colsToCopy until cols) {
+            cells[i] = ScreenCell(
+                char = ' ',
+                combiningChars = emptyList(),
+                fgRed = (defaultForeground.red * 255).toInt(),
+                fgGreen = (defaultForeground.green * 255).toInt(),
+                fgBlue = (defaultForeground.blue * 255).toInt(),
+                bgRed = (defaultBackground.red * 255).toInt(),
+                bgGreen = (defaultBackground.green * 255).toInt(),
+                bgBlue = (defaultBackground.blue * 255).toInt(),
+                bold = false,
+                italic = false,
+                underline = 0,
+                reverse = false,
+                strike = false,
+                width = 1
+            )
+        }
+
+        return true
+    }
+
+    /**
      * Scroll up (view older content).
      * @param lines Number of lines to scroll up
      */
@@ -394,7 +457,8 @@ class TerminalBuffer(
                 }
 
                 override fun popScrollbackLine(cols: Int, cells: Array<ScreenCell>): Int {
-                    return 0
+                    val success = buffer?.popScrollbackLine(cols, cells) ?: false
+                    return if (success) 1 else 0
                 }
 
                 override fun onKeyboardInput(data: ByteArray): Int {
