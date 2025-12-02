@@ -31,8 +31,17 @@ import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
  * Converts Android/Compose keyboard events to terminal escape sequences
  * and control characters that can be sent to the terminal via TerminalEmulator.dispatchKey()
  * or TerminalEmulator.dispatchCharacter().
+ *
+ * @param terminalEmulator Terminal to send keyboard events to
+ * @param modifierManager Optional modifier manager for sticky modifier support.
+ *                        If provided, sticky modifiers from UI buttons will be combined
+ *                        with hardware keyboard modifiers. If null, only hardware
+ *                        keyboard modifiers are used.
  */
-class KeyboardHandler(private val terminalEmulator: TerminalEmulator) {
+class KeyboardHandler(
+    private val terminalEmulator: TerminalEmulator,
+    var modifierManager: ModifierManager? = null
+) {
 
     /**
      * Process a Compose KeyEvent and send to terminal.
@@ -48,29 +57,33 @@ class KeyboardHandler(private val terminalEmulator: TerminalEmulator) {
         val alt = event.isAltPressed
         val shift = event.isShiftPressed
 
-        // Build modifier mask for libvterm
-        val modifiers = buildModifierMask(ctrl, alt, shift)
+        // Build modifier mask for libvterm (combine sticky + hardware modifiers)
+        val modifiers = modifierManager?.combineWithHardware(ctrl, alt, shift)
+            ?: buildModifierMask(ctrl, alt, shift)
 
         // Check if this is a special key that libvterm handles
         val vtermKey = mapToVTermKey(key)
         if (vtermKey != null) {
             terminalEmulator.dispatchKey(modifiers, vtermKey)
+            modifierManager?.clearTransients()
             return true
         }
 
         // Check for control character shortcuts
-        if (ctrl) {
+        if (ctrl || modifierManager?.isCtrlActive() == true) {
             val controlChar = getControlCharacter(key)
             if (controlChar != null) {
                 terminalEmulator.dispatchCharacter(modifiers, controlChar)
+                modifierManager?.clearTransients()
                 return true
             }
         }
 
         // Handle regular printable characters
-        val char = getCharacterFromKey(key, shift)
+        val char = getCharacterFromKey(key, shift || modifierManager?.isShiftActive() == true)
         if (char != null) {
             terminalEmulator.dispatchCharacter(modifiers, char)
+            modifierManager?.clearTransients()
             return true
         }
 
@@ -82,16 +95,19 @@ class KeyboardHandler(private val terminalEmulator: TerminalEmulator) {
      * This is called for printable characters.
      */
     fun onCharacterInput(char: Char, ctrl: Boolean = false, alt: Boolean = false): Boolean {
-        val modifiers = buildModifierMask(ctrl, alt, false)
+        val modifiers = modifierManager?.combineWithHardware(ctrl, alt, false)
+            ?: buildModifierMask(ctrl, alt, false)
 
         // For control characters (Ctrl+letter), convert to control code
-        if (ctrl && char.isLetter()) {
+        if ((ctrl || modifierManager?.isCtrlActive() == true) && char.isLetter()) {
             val controlCode = (char.uppercaseChar().code - 'A'.code + 1).toChar()
             terminalEmulator.dispatchCharacter(modifiers, controlCode)
+            modifierManager?.clearTransients()
             return true
         }
 
         terminalEmulator.dispatchCharacter(modifiers, char)
+        modifierManager?.clearTransients()
         return true
     }
 

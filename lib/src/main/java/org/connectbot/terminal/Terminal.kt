@@ -126,7 +126,8 @@ fun Terminal(
     keyboardEnabled: Boolean = false,
     focusRequester: FocusRequester = remember { FocusRequester() },
     onTerminalTap: () -> Unit = {},
-    forcedSize: Pair<Int, Int>? = null
+    forcedSize: Pair<Int, Int>? = null,
+    modifierManager: ModifierManager? = null
 ) {
     val density = LocalDensity.current
     val clipboardManager = LocalClipboardManager.current
@@ -135,7 +136,7 @@ fun Terminal(
     val screenState = rememberTerminalScreenState(terminalEmulator)
 
     val keyboardHandler = remember(terminalEmulator) {
-        KeyboardHandler(terminalEmulator)
+        KeyboardHandler(terminalEmulator, modifierManager)
     }
 
     // Font size and zoom state
