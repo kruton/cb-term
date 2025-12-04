@@ -110,6 +110,17 @@ internal class KeyboardHandler(
     }
 
     /**
+     * Process text input from IME (Input Method Editor).
+     * This handles multi-byte UTF-8 text from the software keyboard.
+     */
+    fun onTextInput(bytes: ByteArray) {
+        if (bytes.isNotEmpty()) {
+            terminalEmulator.writeInput(bytes)
+            modifierManager?.clearTransients()
+        }
+    }
+
+    /**
      * Build VTerm modifier mask.
      * Bit 0: Shift
      * Bit 1: Alt
