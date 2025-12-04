@@ -24,7 +24,7 @@ import androidx.compose.ui.graphics.Color
  * Each line is immutable and tracks its last modification time for efficient redraws.
  * This is part of the architecture where each terminal line is a separate Kotlin class.
  */
-data class TerminalLine(
+internal data class TerminalLine(
     val row: Int,
     val cells: List<Cell>,
     val lastModified: Long = System.nanoTime()

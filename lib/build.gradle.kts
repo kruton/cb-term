@@ -7,6 +7,7 @@ plugins {
     id("kotlin-parcelize")
     alias(libs.plugins.spotless)
     alias(libs.plugins.release)
+    alias(libs.plugins.metalava)
     `maven-publish`
     signing
 }

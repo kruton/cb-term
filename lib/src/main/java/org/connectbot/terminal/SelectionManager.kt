@@ -20,13 +20,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-enum class SelectionMode {
+internal enum class SelectionMode {
     NONE,
     BLOCK,
     LINE
 }
 
-data class SelectionRange(
+internal data class SelectionRange(
     val startRow: Int,
     val startCol: Int,
     val endRow: Int,
@@ -64,7 +64,7 @@ data class SelectionRange(
     }
 }
 
-class SelectionManager {
+internal class SelectionManager {
     var mode by mutableStateOf(SelectionMode.NONE)
         private set
 

@@ -1,0 +1,50 @@
+// Signature format: 4.0
+package org.connectbot.terminal {
+
+  public interface ModifierManager {
+    method public void clearTransients();
+    method public boolean isAltActive();
+    method public boolean isCtrlActive();
+    method public boolean isShiftActive();
+  }
+
+  public final class TerminalDimensions {
+    ctor public TerminalDimensions(int rows, int columns);
+    method public int component1();
+    method public int component2();
+    method public org.connectbot.terminal.TerminalDimensions copy(int rows, int columns);
+    method public int getColumns();
+    method public int getRows();
+    property public final int columns;
+    property public final int rows;
+  }
+
+  public sealed interface TerminalEmulator {
+    method public void applyColorScheme(int[] ansiColors, int defaultForeground, int defaultBackground);
+    method public void clearScreen();
+    method public void dispatchCharacter(int modifiers, char character);
+    method public void dispatchKey(int modifiers, int key);
+    method public org.connectbot.terminal.TerminalDimensions getDimensions();
+    method public void resize(int newRows, int newCols);
+    method public int setAnsiPalette(int[] ansiColors);
+    method public int setDefaultColors(int foreground, int background);
+    method public void writeInput(byte[] data, optional int offset, optional int length);
+    method public void writeInput(java.nio.ByteBuffer buffer, int length);
+    property public abstract org.connectbot.terminal.TerminalDimensions dimensions;
+  }
+
+  public final class TerminalEmulatorFactory {
+    ctor public TerminalEmulatorFactory();
+    field public static final org.connectbot.terminal.TerminalEmulatorFactory.Companion Companion;
+  }
+
+  public static final class TerminalEmulatorFactory.Companion {
+    method public org.connectbot.terminal.TerminalEmulator create(optional android.os.Looper looper, optional int initialRows, optional int initialCols, optional long defaultForeground, optional long defaultBackground, optional kotlin.jvm.functions.Function1<? super byte[],kotlin.Unit> onKeyboardInput, optional kotlin.jvm.functions.Function0<kotlin.Unit>? onBell, optional kotlin.jvm.functions.Function1<? super org.connectbot.terminal.TerminalDimensions,kotlin.Unit>? onResize);
+  }
+
+  public final class TerminalKt {
+    method @androidx.compose.runtime.Composable public static void Terminal(org.connectbot.terminal.TerminalEmulator terminalEmulator, optional androidx.compose.ui.Modifier modifier, optional android.graphics.Typeface typeface, optional long initialFontSize, optional long minFontSize, optional long maxFontSize, optional long backgroundColor, optional long foregroundColor, optional boolean keyboardEnabled, optional androidx.compose.ui.focus.FocusRequester focusRequester, optional kotlin.jvm.functions.Function0<kotlin.Unit> onTerminalTap, optional kotlin.Pair<java.lang.Integer,java.lang.Integer>? forcedSize, optional org.connectbot.terminal.ModifierManager? modifierManager);
+  }
+
+}
+

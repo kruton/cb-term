@@ -27,6 +27,123 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.nio.ByteBuffer
 
 /**
+ * Terminal emulator interface. This has no dependency on any UI framework
+ * so it may be run in a Service on Android. It handles the management of
+ * the terminal emulation state.
+ */
+sealed interface TerminalEmulator {
+    /**
+     * Write data to the terminal (from PTY/transport).
+     */
+    fun writeInput(data: ByteArray, offset: Int = 0, length: Int = data.size)
+
+    /**
+     * Write data to the terminal using ByteBuffer (more efficient for large data).
+     */
+    fun writeInput(buffer: ByteBuffer, length: Int)
+
+    /**
+     * Resize the terminal.
+     */
+    fun resize(newRows: Int, newCols: Int)
+
+    /**
+     * Dispatch a key event to the terminal.
+     */
+    fun dispatchKey(modifiers: Int, key: Int)
+
+    /**
+     * Dispatch a character to the terminal.
+     */
+    fun dispatchCharacter(modifiers: Int, character: Char)
+
+    /**
+     * Clears the terminal emulator screen.
+     */
+    fun clearScreen()
+
+    /**
+     * Set ANSI palette colors (indices 0-15).
+     *
+     * This configures the 16 ANSI colors used by terminal escape sequences.
+     * Changing the palette triggers a full redraw with new colors.
+     *
+     * @param ansiColors IntArray of ARGB colors (size 16 for all ANSI colors)
+     * @return Number of colors set, or -1 on error
+     */
+    fun setAnsiPalette(ansiColors: IntArray): Int
+
+    /**
+     * Set default terminal colors.
+     *
+     * These colors are used when terminal content explicitly requests
+     * "default" foreground or background (different from ANSI color 7/0).
+     * Changing default colors triggers a full redraw.
+     *
+     * @param foreground ARGB foreground color
+     * @param background ARGB background color
+     * @return 0 on success, -1 on error
+     */
+    fun setDefaultColors(foreground: Int, background: Int): Int
+
+    /**
+     * Apply a complete color scheme to the terminal.
+     *
+     * Convenience method that sets both ANSI palette and default colors
+     * from a color scheme. This is the recommended way to apply themes.
+     *
+     * @param ansiColors IntArray of 16 ARGB colors for ANSI palette
+     * @param defaultForeground ARGB color for default foreground
+     * @param defaultBackground ARGB color for default background
+     */
+    fun applyColorScheme(
+        ansiColors: IntArray,
+        defaultForeground: Int,
+        defaultBackground: Int
+    )
+
+    val dimensions: TerminalDimensions
+}
+
+class TerminalEmulatorFactory {
+    companion object {
+        /**
+         * Creates the default implementation of TerminalEmulator.
+         *
+         * @param looper The Looper to use for callback handling (typically main looper)
+         * @param initialRows Initial number of rows
+         * @param initialCols Initial number of columns
+         * @param defaultForeground Default foreground color
+         * @param defaultBackground Default background color
+         * @param onKeyboardInput Callback for keyboard output (to write to PTY)
+         * @param onBell Optional callback for terminal bell
+         * @param onResize Optional callback for terminal resize
+         */
+        fun create(
+            looper: Looper = Looper.getMainLooper(),
+            initialRows: Int = 24,
+            initialCols: Int = 80,
+            defaultForeground: Color = Color.White,
+            defaultBackground: Color = Color.Black,
+            onKeyboardInput: (ByteArray) -> Unit = {},
+            onBell: (() -> Unit)? = null,
+            onResize: ((TerminalDimensions) -> Unit)? = null
+        ): TerminalEmulator {
+            return TerminalEmulatorImpl(
+                looper = looper,
+                initialRows = initialRows,
+                initialCols = initialCols,
+                defaultForeground = defaultForeground,
+                defaultBackground = defaultBackground,
+                onKeyboardInput = onKeyboardInput,
+                onBell = onBell,
+                onResize = onResize
+            )
+        }
+    }
+}
+
+/**
  * Service-compatible terminal state manager.
  *
  * This class manages terminal state independently of the UI layer, making it
@@ -52,8 +169,9 @@ import java.nio.ByteBuffer
  * @param defaultBackground Default background color
  * @param onKeyboardInput Callback for keyboard output (to write to PTY)
  * @param onBell Optional callback for terminal bell
+ * @param onResize Optional callback for terminal resize
  */
-class TerminalEmulator(
+internal class TerminalEmulatorImpl(
     private val looper: Looper = Looper.getMainLooper(),
     initialRows: Int = 24,
     initialCols: Int = 80,
@@ -62,7 +180,7 @@ class TerminalEmulator(
     private val onKeyboardInput: (ByteArray) -> Unit = {},
     private val onBell: (() -> Unit)? = null,
     private val onResize: ((TerminalDimensions) -> Unit)? = null
-) : TerminalCallbacks {
+) : TerminalEmulator, TerminalCallbacks {
 
     // Handler for escaping native mutex
     private val handler = Handler(looper)
@@ -78,16 +196,17 @@ class TerminalEmulator(
     private val _snapshot = MutableStateFlow(
         TerminalSnapshot.empty(initialRows, initialCols, defaultForeground, defaultBackground)
     )
-    val snapshot: StateFlow<TerminalSnapshot> = _snapshot.asStateFlow()
+    internal val snapshot: StateFlow<TerminalSnapshot> = _snapshot.asStateFlow()
 
     // Sequence number for ordering snapshots
     private var sequenceNumber = 0L
 
     // Terminal dimensions
-    var rows = initialRows
-        private set
-    var cols = initialCols
-        private set
+    override val dimensions: TerminalDimensions
+        get() = TerminalDimensions(rows = rows, columns = cols)
+
+    private var rows = initialRows
+    private var cols = initialCols
 
     // Cursor state
     private var cursorRow = 0
@@ -129,21 +248,21 @@ class TerminalEmulator(
     /**
      * Write data to the terminal (from PTY/transport).
      */
-    fun writeInput(data: ByteArray, offset: Int = 0, length: Int = data.size) {
+    override fun writeInput(data: ByteArray, offset: Int, length: Int) {
         terminalNative.writeInput(data, offset, length)
     }
 
     /**
      * Write data to the terminal using ByteBuffer (more efficient for large data).
      */
-    fun writeInput(buffer: ByteBuffer, length: Int) {
+    override fun writeInput(buffer: ByteBuffer, length: Int) {
         terminalNative.writeInput(buffer, length)
     }
 
     /**
      * Resize the terminal.
      */
-    fun resize(newRows: Int, newCols: Int) {
+    override fun resize(newRows: Int, newCols: Int) {
         rows = newRows
         cols = newCols
         terminalNative.resize(newRows, newCols)
@@ -172,21 +291,21 @@ class TerminalEmulator(
     /**
      * Dispatch a key event to the terminal.
      */
-    fun dispatchKey(modifiers: Int, key: Int) {
+    override fun dispatchKey(modifiers: Int, key: Int) {
         terminalNative.dispatchKey(modifiers, key)
     }
 
     /**
      * Dispatch a character to the terminal.
      */
-    fun dispatchCharacter(modifiers: Int, character: Char) {
+    override fun dispatchCharacter(modifiers: Int, character: Char) {
         terminalNative.dispatchCharacter(modifiers, character.code)
     }
 
     /**
      * Clears the terminal emulator screen.
      */
-    fun clearScreen() = writeInput("\u001B[2J\u001B[H".toByteArray())
+    override fun clearScreen() = writeInput("\u001B[2J\u001B[H".toByteArray())
 
     /**
      * Set ANSI palette colors (indices 0-15).
@@ -197,7 +316,7 @@ class TerminalEmulator(
      * @param ansiColors IntArray of ARGB colors (size 16 for all ANSI colors)
      * @return Number of colors set, or -1 on error
      */
-    fun setAnsiPalette(ansiColors: IntArray): Int {
+    override fun setAnsiPalette(ansiColors: IntArray): Int {
         require(ansiColors.size >= 16) {
             "ANSI palette must contain 16 colors"
         }
@@ -215,7 +334,7 @@ class TerminalEmulator(
      * @param background ARGB background color
      * @return 0 on success, -1 on error
      */
-    fun setDefaultColors(foreground: Int, background: Int): Int {
+    override fun setDefaultColors(foreground: Int, background: Int): Int {
         return terminalNative.setDefaultColors(foreground, background)
     }
 
@@ -229,7 +348,7 @@ class TerminalEmulator(
      * @param defaultForeground ARGB color for default foreground
      * @param defaultBackground ARGB color for default background
      */
-    fun applyColorScheme(
+    override fun applyColorScheme(
         ansiColors: IntArray,
         defaultForeground: Int,
         defaultBackground: Int
@@ -606,13 +725,6 @@ class TerminalEmulator(
         val eastAsianWidth = UCharacter.getIntPropertyValue(codepoint, UProperty.EAST_ASIAN_WIDTH)
         return eastAsianWidth == UCharacter.EastAsianWidth.FULLWIDTH ||
                eastAsianWidth == UCharacter.EastAsianWidth.WIDE
-    }
-
-    /**
-     * Cleanup resources.
-     */
-    fun cleanup() {
-        // Future: cleanup native resources if needed
     }
 }
 

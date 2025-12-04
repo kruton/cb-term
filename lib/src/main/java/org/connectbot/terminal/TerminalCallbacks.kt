@@ -22,7 +22,7 @@ package org.connectbot.terminal
  * IMPORTANT: Callbacks MUST NOT call back into Terminal methods, as the native
  * mutex is not reentrant. This will cause a deadlock.
  */
-interface TerminalCallbacks {
+internal interface TerminalCallbacks {
     /**
      * Called when a region of the screen needs to be redrawn.
      *
@@ -102,7 +102,7 @@ interface TerminalCallbacks {
 /**
  * Rectangular region in the terminal.
  */
-data class TermRect(
+internal data class TermRect(
     val startRow: Int,
     val endRow: Int,
     val startCol: Int,
@@ -112,7 +112,7 @@ data class TermRect(
 /**
  * Cursor position in the terminal.
  */
-data class CursorPosition(
+internal data class CursorPosition(
     val row: Int,
     val col: Int
 )
@@ -120,7 +120,7 @@ data class CursorPosition(
 /**
  * Terminal property values (title, colors, cursor state, etc.).
  */
-sealed class TerminalProperty {
+internal sealed class TerminalProperty {
     data class BoolValue(val value: Boolean) : TerminalProperty()
     data class IntValue(val value: Int) : TerminalProperty()
     data class StringValue(val value: String) : TerminalProperty()
@@ -130,7 +130,7 @@ sealed class TerminalProperty {
 /**
  * A single screen cell with character and attributes.
  */
-data class ScreenCell(
+internal data class ScreenCell(
     val char: Char,
     val combiningChars: List<Char> = emptyList(),
     val fgRed: Int,

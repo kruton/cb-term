@@ -38,7 +38,7 @@ import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
  *                        with hardware keyboard modifiers. If null, only hardware
  *                        keyboard modifiers are used.
  */
-class KeyboardHandler(
+internal class KeyboardHandler(
     private val terminalEmulator: TerminalEmulator,
     var modifierManager: ModifierManager? = null
 ) {
@@ -58,8 +58,7 @@ class KeyboardHandler(
         val shift = event.isShiftPressed
 
         // Build modifier mask for libvterm (combine sticky + hardware modifiers)
-        val modifiers = modifierManager?.combineWithHardware(ctrl, alt, shift)
-            ?: buildModifierMask(ctrl, alt, shift)
+        val modifiers = buildModifierMask(ctrl, alt, shift)
 
         // Check if this is a special key that libvterm handles
         val vtermKey = mapToVTermKey(key)
@@ -95,8 +94,7 @@ class KeyboardHandler(
      * This is called for printable characters.
      */
     fun onCharacterInput(char: Char, ctrl: Boolean = false, alt: Boolean = false): Boolean {
-        val modifiers = modifierManager?.combineWithHardware(ctrl, alt, false)
-            ?: buildModifierMask(ctrl, alt, false)
+        val modifiers = buildModifierMask(ctrl, alt, false)
 
         // For control characters (Ctrl+letter), convert to control code
         if ((ctrl || modifierManager?.isCtrlActive() == true) && char.isLetter()) {
@@ -118,11 +116,31 @@ class KeyboardHandler(
      * Bit 2: Ctrl
      */
     private fun buildModifierMask(ctrl: Boolean, alt: Boolean, shift: Boolean): Int {
-        var mask = 0
+        var mask = getModifierMask()
         if (shift) mask = mask or 1
         if (alt) mask = mask or 2
         if (ctrl) mask = mask or 4
         return mask
+    }
+
+    /**
+     * Get VTerm modifier mask for current sticky state.
+     *
+     * Returns a bitmask where:
+     * - Bit 0 (0x01): Shift
+     * - Bit 1 (0x02): Alt
+     * - Bit 2 (0x04): Ctrl
+     *
+     * This matches the format expected by Terminal.dispatchKey() and dispatchCharacter().
+     */
+    fun getModifierMask(): Int {
+        return modifierManager?.let {
+            var mask = 0
+            if (it.isShiftActive() == true) mask = mask or 1  // Bit 0: Shift
+            if (it.isAltActive() == true) mask = mask or 2    // Bit 1: Alt
+            if (it.isCtrlActive() == true) mask = mask or 4   // Bit 2: Ctrl
+            return mask
+        } ?: 0
     }
 
     /**
@@ -303,7 +321,7 @@ class KeyboardHandler(
  * VTerm key codes from libvterm.
  * These correspond to VTermKey enum in vterm.h
  */
-object VTermKey {
+internal object VTermKey {
     const val NONE = 0
     const val ENTER = 1
     const val TAB = 2
