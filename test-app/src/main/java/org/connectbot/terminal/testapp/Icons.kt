@@ -125,4 +125,49 @@ object CustomIcons {
             }
         }.build()
     }
+
+    val PhoneAndroid: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Custom.PhoneAndroid",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = SolidColor(Color.Black),
+                fillAlpha = 1f,
+                stroke = null,
+                strokeAlpha = 1f,
+                strokeLineWidth = 1f,
+                strokeLineCap = StrokeCap.Butt,
+                strokeLineJoin = StrokeJoin.Miter,
+                strokeLineMiter = 1f,
+                pathFillType = PathFillType.NonZero
+            ) {
+                moveTo(16f, 1f)
+                horizontalLineTo(8f)
+                curveTo(6.34f, 1f, 5f, 2.34f, 5f, 4f)
+                verticalLineToRelative(16f)
+                curveToRelative(0f, 1.66f, 1.34f, 3f, 3f, 3f)
+                horizontalLineToRelative(8f)
+                curveToRelative(1.66f, 0f, 3f, -1.34f, 3f, -3f)
+                verticalLineTo(4f)
+                curveToRelative(0f, -1.66f, -1.34f, -3f, -3f, -3f)
+                close()
+                moveTo(14f, 21f)
+                horizontalLineToRelative(-4f)
+                verticalLineToRelative(-1f)
+                horizontalLineToRelative(4f)
+                verticalLineToRelative(1f)
+                close()
+                moveTo(17.25f, 18f)
+                horizontalLineTo(6.75f)
+                verticalLineTo(4f)
+                horizontalLineToRelative(10.5f)
+                verticalLineToRelative(14f)
+                close()
+            }
+        }.build()
+    }
 }

@@ -35,10 +35,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,9 +71,16 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -109,7 +121,10 @@ private const val CURSOR_BLINK_RATE_MS = 500L
  * @param maxFontSize Maximum font size for pinch-to-zoom
  * @param backgroundColor Default background color
  * @param foregroundColor Default foreground color
- * @param keyboardEnabled Enable keyboard input handling (default: false for display-only mode)
+ * @param keyboardEnabled Enable keyboard input handling (default: false for display-only mode).
+ *                        When false, no keyboard input (hardware or soft) is accepted.
+ * @param showSoftKeyboard Whether to show the soft keyboard/IME (default: true when keyboardEnabled=true).
+ *                         Only applies when keyboardEnabled=true. Hardware keyboard always works when keyboardEnabled=true.
  * @param focusRequester Focus requester for keyboard input (if enabled)
  * @param onTerminalTap Callback for a simple tap event on the terminal (when no selection is active)
  * @param forcedSize Force terminal to specific dimensions (rows, cols). When set, font size is calculated to fit.
@@ -125,6 +140,7 @@ fun Terminal(
     backgroundColor: Color = Color.Black,
     foregroundColor: Color = Color.White,
     keyboardEnabled: Boolean = false,
+    showSoftKeyboard: Boolean = true,
     focusRequester: FocusRequester = remember { FocusRequester() },
     onTerminalTap: () -> Unit = {},
     forcedSize: Pair<Int, Int>? = null,
@@ -139,10 +155,11 @@ fun Terminal(
         return
     }
 
-    val terminalEmulator = terminalEmulator as TerminalEmulatorImpl
+    val terminalEmulator: TerminalEmulatorImpl = terminalEmulator
 
     val density = LocalDensity.current
     val clipboardManager = LocalClipboardManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     // Observe terminal state via StateFlow
     val screenState = rememberTerminalScreenState(terminalEmulator)
@@ -165,10 +182,45 @@ fun Terminal(
     // Cursor blink state
     var cursorBlinkVisible by remember(terminalEmulator) { mutableStateOf(true) }
 
-    // Request focus when keyboard is enabled
-    LaunchedEffect(keyboardEnabled) {
-        if (keyboardEnabled) {
-            focusRequester.requestFocus()
+    // Hardware keyboard detection
+    val configuration = LocalConfiguration.current
+    val hasHardwareKeyboard = remember(configuration) {
+        val keyboardType = configuration.keyboard
+        keyboardType == android.content.res.Configuration.KEYBOARD_QWERTY ||
+                keyboardType == android.content.res.Configuration.KEYBOARD_12KEY
+    }
+
+    // IME text field state (hidden BasicTextField for capturing IME input)
+    var imeTextFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+    val imeFocusRequester = remember { FocusRequester() }
+
+    // Determine if IME should be shown
+    // IME is shown when:
+    // 1. keyboardEnabled is true (master switch)
+    // 2. showSoftKeyboard is true (user wants IME visible)
+    // Note: We don't check hasHardwareKeyboard because hardware keyboard users may still
+    // want IME for special input methods (Chinese, Japanese, emoji, etc.)
+    val shouldShowIme = keyboardEnabled && showSoftKeyboard
+
+    // Manage focus and IME visibility
+    // Using SideEffect + LaunchedEffect combo for reliable keyboard control
+    LaunchedEffect(keyboardEnabled, shouldShowIme) {
+        if (!keyboardEnabled) {
+            // Keyboard disabled entirely - hide IME
+            keyboardController?.hide()
+            return@LaunchedEffect
+        }
+
+        if (shouldShowIme) {
+            // Need to show IME - request focus and show keyboard
+            // Use a small delay to ensure the BasicTextField is ready
+            delay(100)
+            imeFocusRequester.requestFocus()
+            delay(50)
+            keyboardController?.show()
+        } else {
+            // Need to hide IME - just hide, don't clear focus (hardware keyboard needs it)
+            keyboardController?.hide()
         }
     }
 
@@ -242,7 +294,8 @@ fun Terminal(
             .onSizeChanged {
                 terminalEmulator.resize(
                     charsPerDimension(it.height, baseCharHeight),
-                    charsPerDimension(it.width, baseCharWidth))
+                    charsPerDimension(it.width, baseCharWidth)
+                )
             }
             .then(
                 if (keyboardEnabled) {
@@ -649,55 +702,83 @@ fun Terminal(
                     }
                 }
             }
+        }
 
-            // Magnifying glass
-            if (showMagnifier) {
-                MagnifyingGlass(
-                    position = magnifierPosition,
-                    screenState = screenState,
-                    baseCharWidth = baseCharWidth,
-                    baseCharHeight = baseCharHeight,
-                    baseCharBaseline = baseCharBaseline,
-                    textPaint = textPaint,
-                    backgroundColor = backgroundColor,
-                    foregroundColor = foregroundColor,
-                    selectionManager = selectionManager
-                )
-            }
+        // Magnifying glass
+        if (showMagnifier) {
+            MagnifyingGlass(
+                position = magnifierPosition,
+                screenState = screenState,
+                baseCharWidth = baseCharWidth,
+                baseCharHeight = baseCharHeight,
+                baseCharBaseline = baseCharBaseline,
+                textPaint = textPaint,
+                backgroundColor = backgroundColor,
+                foregroundColor = foregroundColor,
+                selectionManager = selectionManager
+            )
+        }
 
-            // Copy button when text is selected
-            if (selectionManager.mode != SelectionMode.NONE && !selectionManager.isSelecting) {
-                val range = selectionManager.selectionRange
-                if (range != null) {
-                    // Position copy button above the selection
-                    val endPosition = range.getEndPosition()
-                    val buttonX = endPosition.second * baseCharWidth
-                    val buttonY = endPosition.first * baseCharHeight - with(density) { 48.dp.toPx() }
+        // Copy button when text is selected
+        if (selectionManager.mode != SelectionMode.NONE && !selectionManager.isSelecting) {
+            val range = selectionManager.selectionRange
+            if (range != null) {
+                // Position copy button above the selection
+                val endPosition = range.getEndPosition()
+                val buttonX = endPosition.second * baseCharWidth
+                val buttonY = endPosition.first * baseCharHeight - with(density) { 48.dp.toPx() }
 
-                    Box(
-                        modifier = Modifier
-                            .offset(
-                                x = with(density) { buttonX.toDp() },
-                                y = with(density) { buttonY.coerceAtLeast(0f).toDp() }
-                            )
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { buttonX.toDp() },
+                            y = with(density) { buttonY.coerceAtLeast(0f).toDp() }
+                        )
+                ) {
+                    FloatingActionButton(
+                        onClick = {
+                            val selectedText =
+                                selectionManager.getSelectedText(screenState.snapshot)
+                            clipboardManager.setText(AnnotatedString(selectedText))
+                            selectionManager.clearSelection()
+                        },
+                        modifier = Modifier.size(48.dp),
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     ) {
-                        FloatingActionButton(
-                            onClick = {
-                                val selectedText = selectionManager.getSelectedText(screenState.snapshot)
-                                clipboardManager.setText(AnnotatedString(selectedText))
-                                selectionManager.clearSelection()
-                            },
-                            modifier = Modifier.size(48.dp),
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ) {
-                            Text("Copy", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-                        }
+                        Text("Copy", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
+
+        // Hidden BasicTextField for IME (software keyboard) input
+        if (keyboardEnabled) {
+            BasicTextField(
+                value = imeTextFieldValue,
+                onValueChange = { newValue ->
+                    if (newValue.text.isNotEmpty()) {
+                        val input = newValue.text
+                        val bytes = input.toByteArray(Charsets.UTF_8)
+                        keyboardHandler.onTextInput(bytes)
+                        imeTextFieldValue = TextFieldValue("")
+                    } else {
+                        imeTextFieldValue = newValue
+                    }
+                },
+                modifier = Modifier
+                    .size(1.dp)
+                    .focusRequester(imeFocusRequester),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.None,
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false
+                )
+            )
+        }
     }
+
 }
 
 /**
@@ -947,6 +1028,7 @@ private fun DrawScope.drawCursor(
                 alpha = 0.7f
             )
         }
+
         CursorShape.UNDERLINE -> {
             // Underline cursor - line at bottom of cell
             val underlineHeight = charHeight * 0.15f  // 15% of cell height
@@ -957,6 +1039,7 @@ private fun DrawScope.drawCursor(
                 alpha = 0.9f
             )
         }
+
         CursorShape.BAR_LEFT -> {
             // Bar cursor - vertical line at left of cell
             val barWidth = charWidth * 0.15f  // 15% of cell width

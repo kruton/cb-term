@@ -20,9 +20,11 @@ import android.graphics.Typeface
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -77,10 +79,23 @@ fun ShellScreen() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentSessionIndex by remember { mutableStateOf(0) }
     var keyboardEnabled by remember { mutableStateOf(false) }
+
+    // Detect hardware keyboard
+    val configuration = LocalConfiguration.current
+    val hasHardwareKeyboard = remember(configuration) {
+        val keyboardType = configuration.keyboard
+        keyboardType == android.content.res.Configuration.KEYBOARD_QWERTY ||
+                keyboardType == android.content.res.Configuration.KEYBOARD_12KEY
+    }
+
+    // Auto-hide IME by default when hardware keyboard is present, but user can override
+    var showSoftKeyboard by remember(hasHardwareKeyboard) { mutableStateOf(!hasHardwareKeyboard) }
+
     var useForcedSize by remember { mutableStateOf(false) }
     var customRows by remember { mutableStateOf(24) }
     var customCols by remember { mutableStateOf(80) }
     var showSizeDialog by remember { mutableStateOf(false) }
+    var showSettingsMenu by remember { mutableStateOf(false) }
 
     // Font selection
     val availableFonts = remember {
@@ -221,89 +236,136 @@ fun ShellScreen() {
             }
         }
 
-        // Second row with font selector and keyboard toggle
+        // Settings button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.End
         ) {
-            // Font selector
             Box {
                 Button(
-                    onClick = { showFontMenu = true },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    onClick = { showSettingsMenu = true }
                 ) {
-                    Text("Font: $selectedFont")
+                    Text("⚙ Settings")
                 }
                 DropdownMenu(
-                    expanded = showFontMenu,
-                    onDismissRequest = { showFontMenu = false }
+                    expanded = showSettingsMenu,
+                    onDismissRequest = { showSettingsMenu = false }
                 ) {
+                    // Font selector submenu
+                    Text(
+                        text = "Font: $selectedFont",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     availableFonts.keys.forEach { fontName ->
                         DropdownMenuItem(
-                            text = { Text(fontName) },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (fontName == selectedFont) Text("✓ ") else Text("   ")
+                                    Text(fontName)
+                                }
+                            },
                             onClick = {
                                 selectedFont = fontName
-                                showFontMenu = false
                             }
                         )
                     }
-                }
-            }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Forced size toggle with config button
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = useForcedSize,
-                        onCheckedChange = { useForcedSize = it }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Size configuration
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Fixed Size")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (useForcedSize) "${customRows}×${customCols}" else "Auto",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    Switch(
+                                        checked = useForcedSize,
+                                        onCheckedChange = { useForcedSize = it },
+                                        modifier = Modifier.height(24.dp)
+                                    )
+                                }
+                            }
+                        },
+                        onClick = { showSizeDialog = true }
                     )
-                    TextButton(
-                        onClick = { showSizeDialog = true },
-                        modifier = Modifier.padding(start = 4.dp)
-                    ) {
-                        Text(
-                            text = if (useForcedSize) "${customRows}x${customCols}" else "Auto",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (useForcedSize)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
 
-                // Keyboard toggle
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconToggleButton(
-                        checked = keyboardEnabled,
-                        onCheckedChange = { keyboardEnabled = it }
-                    ) {
-                        Icon(
-                            imageVector = CustomIcons.Keyboard,
-                            contentDescription = "Toggle Keyboard Input",
-                            tint = if (keyboardEnabled)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Text(
-                        text = if (keyboardEnabled) "Keyboard: ON" else "Keyboard: OFF",
-                        modifier = Modifier.padding(start = 8.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (keyboardEnabled)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurface
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Keyboard input toggle
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = CustomIcons.Keyboard,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp).padding(end = 8.dp)
+                                    )
+                                    Text("Keyboard Input")
+                                }
+                                Switch(
+                                    checked = keyboardEnabled,
+                                    onCheckedChange = { keyboardEnabled = it },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                        },
+                        onClick = { keyboardEnabled = !keyboardEnabled }
+                    )
+
+                    // IME toggle (only when keyboard enabled)
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = CustomIcons.PhoneAndroid,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp).padding(end = 8.dp),
+                                        tint = if (keyboardEnabled)
+                                            LocalContentColor.current
+                                        else
+                                            LocalContentColor.current.copy(alpha = 0.38f)
+                                    )
+                                    Text(
+                                        "Show Soft Keyboard",
+                                        color = if (keyboardEnabled)
+                                            LocalContentColor.current
+                                        else
+                                            LocalContentColor.current.copy(alpha = 0.38f)
+                                    )
+                                }
+                                Switch(
+                                    checked = showSoftKeyboard,
+                                    onCheckedChange = { showSoftKeyboard = it },
+                                    enabled = keyboardEnabled,
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                        },
+                        onClick = { if (keyboardEnabled) showSoftKeyboard = !showSoftKeyboard },
+                        enabled = keyboardEnabled
                     )
                 }
             }
@@ -339,6 +401,7 @@ fun ShellScreen() {
                     backgroundColor = Color.Black,
                     foregroundColor = Color(0xFFD0D0D0), // Light gray for better readability
                     keyboardEnabled = keyboardEnabled,
+                    showSoftKeyboard = showSoftKeyboard,
                     forcedSize = if (useForcedSize) Pair(customRows, customCols) else null
                 )
             }
