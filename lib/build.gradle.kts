@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.spotless)
     alias(libs.plugins.release)
     alias(libs.plugins.metalava)
+    alias(libs.plugins.dokka)
     `maven-publish`
     signing
 }

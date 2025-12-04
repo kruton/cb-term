@@ -162,8 +162,8 @@ jobs:
           files: |
             ConnectBotTerminal-*.aar
 
-  javadoc:
-    name: Publish Javadoc to GitHub Pages
+  docs:
+    name: Publish docs to GitHub Pages
     needs: build
     if: ${{ (github.event_name == 'push') && ((github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-latest
@@ -199,8 +199,8 @@ jobs:
           cmdline-tools-version: '13114758'
           packages: 'cmdline-tools;latest tools platform-tools'
 
-      - name: Build Javadoc JAR
-        run: ./gradlew javaDocReleaseJar
+      - name: Build documents
+        run: ./gradlew :lib:dokkaGenerateHtml
 
       - name: Determine subdirectory name
         id: subdir
@@ -214,7 +214,7 @@ jobs:
           path: gh-pages
         continue-on-error: true
 
-      - name: Prepare Javadoc for deployment
+      - name: Prepare docs for deployment
         run: |
           mkdir -p gh-pages-deploy
           if [ -d "gh-pages" ]; then
@@ -222,7 +222,7 @@ jobs:
           fi
           rm -rf "gh-pages-deploy/${{ steps.subdir.outputs.name }}"
           mkdir -p "gh-pages-deploy/${{ steps.subdir.outputs.name }}"
-          unzip -o ./lib/build/intermediates/java_doc_jar/release/release-javadoc.jar -d "gh-pages-deploy/${{ steps.subdir.outputs.name }}"
+          cp -r ./lib/build/dokka/html/* "gh-pages-deploy/${{ steps.subdir.outputs.name }}/"
 
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
