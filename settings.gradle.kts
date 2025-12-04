@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "cb_term"
+rootProject.name = "termlib"
 
 include(":lib")
 include(":test-app")

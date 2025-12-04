@@ -145,7 +145,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-val gitHubUrl = "https://github.com/connectbot/terminal"
+val gitHubUrl = "https://github.com/connectbot/termlib"
 
 afterEvaluate {
     publishing {
@@ -154,11 +154,11 @@ afterEvaluate {
                 from(components["release"])
 
                 groupId = "org.connectbot"
-                artifactId = "terminal"
+                artifactId = "termlib"
 
                 pom {
-                    name.set("terminal")
-                    description.set("A Jetpack Compose terminal emulator component for Android using libvterm")
+                    name.set("termlib")
+                    description.set("ConnectBot's terminal emulator Android Compose component using libvterm")
                     url.set(gitHubUrl)
                     licenses {
                         license {
