@@ -4,6 +4,7 @@ kotlin = "2.2.21"
 spotless = "8.0.0"
 publish = "2.0.0"
 release = "3.1.0"
+metalava = "0.4.0-alpha03"
 
 composeBom = "2025.11.00"
 lifecycleViewModel = "2.9.4"
@@ -51,3 +52,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 publish = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "publish" }
 release = { id = "net.researchgate.release", version.ref = "release" }
+metalava = { id = "me.tylerbwong.gradle.metalava", version.ref = "metalava" }

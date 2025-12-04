@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * Cursor shape types matching libvterm's VTERM_PROP_CURSORSHAPE values.
  */
-enum class CursorShape {
+internal enum class CursorShape {
     BLOCK,       // VTERM_PROP_CURSORSHAPE_BLOCK = 1
     UNDERLINE,   // VTERM_PROP_CURSORSHAPE_UNDERLINE = 2
     BAR_LEFT     // VTERM_PROP_CURSORSHAPE_BAR_LEFT = 3
@@ -51,7 +51,7 @@ enum class CursorShape {
  * @property timestamp Timestamp when this snapshot was created (System.currentTimeMillis())
  * @property sequenceNumber Monotonically increasing sequence number for ordering snapshots
  */
-data class TerminalSnapshot(
+internal data class TerminalSnapshot(
     val lines: List<TerminalLine>,
     val scrollback: List<TerminalLine>,
     val cursorRow: Int,

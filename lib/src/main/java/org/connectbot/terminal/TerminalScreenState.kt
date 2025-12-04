@@ -39,7 +39,7 @@ import androidx.compose.runtime.setValue
  * @property snapshot The current immutable terminal snapshot
  */
 @Stable
-class TerminalScreenState(
+internal class TerminalScreenState(
     val snapshot: TerminalSnapshot
 ) {
     /**
@@ -143,8 +143,8 @@ class TerminalScreenState(
  * @return A TerminalScreenState that tracks the current terminal snapshot
  */
 @Composable
-fun rememberTerminalScreenState(
-    terminalEmulator: TerminalEmulator
+internal fun rememberTerminalScreenState(
+    terminalEmulator: TerminalEmulatorImpl
 ): TerminalScreenState {
     val snapshot by remember(terminalEmulator) {
         terminalEmulator.snapshot

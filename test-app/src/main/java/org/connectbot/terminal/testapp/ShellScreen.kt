@@ -51,7 +51,7 @@ data class TerminalSession(
  */
 private fun createTerminalEmulator(): TerminalEmulator {
     lateinit var manager: TerminalEmulator
-    manager = TerminalEmulator(
+    manager = TerminalEmulatorFactory.create(
         initialRows = 24,
         initialCols = 80,
         defaultForeground = Color.White,
@@ -104,7 +104,7 @@ fun ShellScreen() {
     }
 
     // Initialize all sessions once
-    DisposableEffect(Unit) {
+    LaunchedEffect(Unit) {
         scope.launch {
             try {
                 // Load welcome message into first session
@@ -137,11 +137,6 @@ fun ShellScreen() {
             } catch (e: Exception) {
                 errorMessage = "Failed to initialize: ${e.message}\n${e.stackTraceToString()}"
             }
-        }
-
-        onDispose {
-            // Cleanup all sessions
-            sessions.forEach { it.emulator.cleanup() }
         }
     }
 

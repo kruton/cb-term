@@ -32,7 +32,7 @@ import java.nio.ByteBuffer
  * - Callbacks MUST NOT call back into Terminal methods (will deadlock)
  * - Safe to call from multiple threads (serialized by native mutex)
  */
-class TerminalNative(private val callbacks: TerminalCallbacks) : AutoCloseable {
+internal class TerminalNative(private val callbacks: TerminalCallbacks) : AutoCloseable {
     private var nativePtr: Long = 0
 
     init {

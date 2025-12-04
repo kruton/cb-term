@@ -130,6 +130,17 @@ fun Terminal(
     forcedSize: Pair<Int, Int>? = null,
     modifierManager: ModifierManager? = null
 ) {
+    if (terminalEmulator !is TerminalEmulatorImpl) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text("Unknown TerminalEmulator type")
+        }
+        return
+    }
+
+    val terminalEmulator = terminalEmulator as TerminalEmulatorImpl
+
     val density = LocalDensity.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -280,7 +291,8 @@ fun Terminal(
 
         // Resize terminal when dimensions change
         LaunchedEffect(terminalEmulator, newRows, newCols) {
-            if (newRows != terminalEmulator.rows || newCols != terminalEmulator.cols) {
+            val dimensions = terminalEmulator.dimensions
+            if (newRows != dimensions.rows || newCols != dimensions.columns) {
                 terminalEmulator.resize(newRows, newCols)
             }
         }
