@@ -35,6 +35,8 @@ target_include_directories(jni_cb_term PRIVATE
 
 target_compile_features(jni_cb_term PRIVATE cxx_std_17)
 
+target_link_options (jni_cb_term PRIVATE "-Wl,-z,max-page-size=16384")
+
 target_link_libraries(jni_cb_term
     vterm
     android
