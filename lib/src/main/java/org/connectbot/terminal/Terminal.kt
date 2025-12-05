@@ -400,6 +400,8 @@ fun Terminal(
                             transformOrigin = zoomOrigin
                         }
                         .pointerInput(terminalEmulator, baseCharHeight) {
+                            val touchSlopSquared =
+                                viewConfiguration.touchSlop * viewConfiguration.touchSlop
                             coroutineScope {
                                 awaitEachGesture {
                                     var gestureType: GestureType = GestureType.Undetermined
@@ -540,7 +542,7 @@ fun Terminal(
 
                                         // Determine gesture if still undetermined
                                         if (gestureType == GestureType.Undetermined && !longPressDetected) {
-                                            if (dragAmount.getDistanceSquared() > 100f) {  // Touch slop
+                                            if (dragAmount.getDistanceSquared() > touchSlopSquared) {
                                                 longPressJob.cancel()
                                                 gestureType = GestureType.Scroll
                                             }
