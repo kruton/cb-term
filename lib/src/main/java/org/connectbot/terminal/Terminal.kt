@@ -546,6 +546,10 @@ fun Terminal(
                                             if (dragAmount.getDistanceSquared() > touchSlopSquared) {
                                                 longPressJob.cancel()
                                                 gestureType = GestureType.Scroll
+                                                // Clear any active selection when scrolling starts
+                                                if (selectionManager.mode != SelectionMode.NONE) {
+                                                    selectionManager.clearSelection()
+                                                }
                                             }
                                         }
 
